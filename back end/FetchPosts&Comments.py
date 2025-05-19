@@ -20,7 +20,7 @@ subreddit = reddit.subreddit("formula1")
 
 records = []
 
-for post in subreddit.hot(limit = 500):
+for post in subreddit.hot(limit = 1):
     records.append({
         "id" : post.id,
         "title" : post.title,
@@ -28,12 +28,12 @@ for post in subreddit.hot(limit = 500):
         "score": post.score,
         "created": post.created_utc
     })
-    post.comment.repalce_more(limit = 0)
-    for c in post.comment.list():
+    post.comments.replace_more(limit = 300)
+    for c in post.comments[:10]:
         records.append({
             "id" : c.id,
-            "title" : c.title,
-            "selftext" : c.selftext,
+            "parent_id" : post.id,
+            "body" : c.body,
             "score": c.score,
             "created": c.created_utc
         })
