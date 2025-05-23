@@ -1,42 +1,57 @@
 import os
-from dotenv import find_dotenv, load_dotenv
+import argparse
+import logging
+from datetime import datetime, timezone
+from dotenv import load_dotenv, find_dotenv
+import praw
+import pandas as pd
 
-dotenv_path = find_dotenv()
-load_dotenv(dotenv_path)
+load_dotenv(find_dotenv())
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-USER_AGENT =os.getenv("USER_AGENT")
-
-import praw, pandas as pd
+parser = argparse.ArgumentParser()
+parser.add_argument("--subreddit", default="formula1")
+parser.add_argument("--post_limit", type=int, default=50)
+parser.add_argument("--comment_limit", type=int, default=10)
+parser.add_argument("--output", default="f1_reddit.csv")
+args = parser.parse_args()
 
 reddit = praw.Reddit(
-    client_id = CLIENT_ID,
-    client_secret = CLIENT_SECRET,
-    user_agent = USER_AGENT
+    client_id=os.getenv("CLIENT_ID"),
+    client_secret=os.getenv("CLIENT_SECRET"),
+    user_agent=os.getenv("USER_AGENT")
 )
-
-subreddit = reddit.subreddit("formula1")
 
 records = []
 
-for post in subreddit.hot(limit = 1):
-    records.append({
-        "id" : post.id,
-        "title" : post.title,
-        "selftext" : post.selftext,
-        "score": post.score,
-        "created": post.created_utc
-    })
-    post.comments.replace_more(limit = 300)
-    for c in post.comments[:10]:
+sub = reddit.subreddit(args.subreddit)
+for post in sub.hot(limit=args.post_limit):
+    try:
+        post.comments.replace_more(limit=None)
+        comments = post.comments.list()[: args.comment_limit]
         records.append({
-            "id" : c.id,
-            "parent_id" : post.id,
-            "body" : c.body,
-            "score": c.score,
-            "created": c.created_utc
+            "id": post.id,
+            "title": post.title,
+            "selftext": post.selftext,
+            "score": post.score,
+            "created": datetime.fromtimestamp(post.created_utc).isoformat(),
+            "permalink": post.permalink,
+            "author": getattr(post.author, "name", None),
+            "num_comments": post.num_comments,
         })
- 
+        for c in comments:
+            records.append({
+                "id": c.id,
+                "link_id": c.link_id,
+                "parent_id": c.parent_id,
+                "body": c.body,
+                "score": c.score,
+                "created": datetime.fromtimestamp(c.created_utc).isoformat(),
+                "author": getattr(c.author, "name", None),
+            })
+    except Exception as e:
+        logging.warning(f"Skipping post {post.id} due to error: {e}")
+
 df = pd.DataFrame(records)
-df.to_csv("f1_reddit.csv", index=False)
+df.to_csv(args.output, index=False)
+logging.info(f"Wrote {len(df)} records to {args.output}")
