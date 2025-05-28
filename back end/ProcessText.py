@@ -1,4 +1,6 @@
 import pandas as pd
+import argparse
+import requests
 import re
 import nltk
 from nltk.corpus import stopwords
@@ -25,7 +27,22 @@ nltk.download("punkt_tab")
 nltk.download("vader_lexicon") 
 stops = set(stopwords.words("english"))
 
-df = pd.read_csv("f1_reddit.csv")
+resp = requests.get("https://api.jolpi.ca/ergast/f1/current/next.json")
+data = resp.json()["MRData"]["RaceTable"]["Races"][0]
+race_name = data["raceName"] 
+default_csv = f"{race_name}.csv"
+
+parser = argparse.ArgumentParser(
+    description="Clean, tokenize & analyze an F1 Reddit CSV"
+)
+parser.add_argument(
+    "--input","-i",
+    default=default_csv,
+    help="Path to the CSV file (default: %(default)s)"
+)
+args = parser.parse_args()
+
+df = pd.read_csv(args.input)
 
 df["cleaned"] = df["selftext"].fillna("") + " " + df["body"].fillna("")
 df["cleaned"] = df["cleaned"].map(clean_text)

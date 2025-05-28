@@ -5,15 +5,26 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv, find_dotenv
 import praw
 import pandas as pd
+import requests
+from datetime import datetime, timedelta
 
 load_dotenv(find_dotenv())
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+resp = requests.get("https://api.jolpi.ca/ergast/f1/current/next.json")
+data = resp.json()["MRData"]["RaceTable"]["Races"][0]
+
+race_name     = data["raceName"]             
+circuit_name  = data["Circuit"]["circuitName"]
+race_date     = data["date"]                 
+race_datetime = datetime.fromisoformat(race_date)
+end_datetime  = race_datetime + timedelta(days=3)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--subreddit", default="formula1")
 parser.add_argument("--post_limit", type=int, default=50)
 parser.add_argument("--comment_limit", type=int, default=10)
-parser.add_argument("--output", default="f1_reddit.csv")
+parser.add_argument("--output", default=race_name + ".csv")
 args = parser.parse_args()
 
 reddit = praw.Reddit(
@@ -25,9 +36,22 @@ reddit = praw.Reddit(
 records = []
 
 sub = reddit.subreddit(args.subreddit)
-for post in sub.hot(limit=args.post_limit):
+
+start_dt = race_datetime.replace(tzinfo=timezone.utc)
+end_dt   = end_datetime.  replace(tzinfo=timezone.utc)
+start_ts = start_dt.timestamp()
+end_ts   = end_dt.timestamp()
+
+posts = (
+    p for p in sub.new(limit=args.post_limit)
+    if race_name.lower()    in p.title.lower()
+    or circuit_name.lower() in p.title.lower()
+    or (start_ts <= p.created_utc <= end_ts)
+)
+
+for post in posts:
     try:
-        post.comments.replace_more(limit=None)
+        post.comments.replace_more(limit=0)
         comments = post.comments.list()[: args.comment_limit]
         records.append({
             "id": post.id,
