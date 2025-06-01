@@ -43,15 +43,12 @@ parser.add_argument(
 args = parser.parse_args()
 
 df = pd.read_csv(args.input)
-
 df["cleaned"] = df["selftext"].fillna("") + " " + df["body"].fillna("")
 df["cleaned"] = df["cleaned"].map(clean_text)
-
 df["tokens"] = df["cleaned"].map(tokenize_remove_stops)
 
 stemmer = PorterStemmer()
 df["stems"] = df["tokens"].map(lambda toks: [stemmer.stem(t) for t in toks])
-
 docs = df["tokens"].map(" ".join)
 
 tfidf = TfidfVectorizer(max_features=5000)  
@@ -60,3 +57,7 @@ X = tfidf.fit_transform(docs)
 sia = SentimentIntensityAnalyzer()
 df["vader_score"] = df["cleaned"].map(lambda txt: sia.polarity_scores(txt)["compound"])
 
+outColumns = ["id", "created", "vader_score"]
+outputSentimentFile = f"{race_name} Sentiment.csv"
+df.to_csv(outputSentimentFile, columns=outColumns, index=False)
+print(f"Saved sentiment scores to {outputSentimentFile}")
