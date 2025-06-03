@@ -10,4 +10,3 @@ plt.xlabel("Sentiment Score")
 plt.ylabel("# of Posts/Comments")
 plt.grid(axis="y", alpha=0.3)
 plt.show()
-
