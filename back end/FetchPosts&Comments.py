@@ -1,12 +1,19 @@
 import os
-import argparse
-import logging
-from datetime import datetime, timezone
-from dotenv import load_dotenv, find_dotenv
 import praw
-import pandas as pd
+import logging
+import argparse
 import requests
-from datetime import datetime, timedelta
+import pandas as pd
+from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv, find_dotenv
+
+sessionKeywords = {
+    "FP1" : ["fp1", "free practice 1"],
+    "FP2" : ["fp2", "free practice 2"],
+    "FP3" : ["fp3", "free practice 3"],
+    "Qualifying" : ["quali", "qualifying"],
+    "Race" : ["race", "grand prix", "gp", "race thread"]
+}
 
 load_dotenv(find_dotenv())
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -24,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--subreddit", default="formula1")
 parser.add_argument("--post_limit", type=int, default=50)
 parser.add_argument("--comment_limit", type=int, default=10)
-parser.add_argument("--output", default=race_name + ".csv")
+parser.add_argument("--session", type=str, default="Race", help="FP1, FP2, FP3, Qualifying, Race")
 args = parser.parse_args()
 
 reddit = praw.Reddit(
@@ -42,12 +49,9 @@ end_dt   = end_datetime.  replace(tzinfo=timezone.utc)
 start_ts = start_dt.timestamp()
 end_ts   = end_dt.timestamp()
 
-posts = (
-    p for p in sub.new(limit=args.post_limit)
-    if race_name.lower()    in p.title.lower()
-    or circuit_name.lower() in p.title.lower()
-    or (start_ts <= p.created_utc <= end_ts)
-)
+selectedKeywords = sessionKeywords.get(args.session, [])
+query = " OR ".join(selectedKeywords)
+posts = sub.search(query, time_filter="week", sort="top", limit=args.post_limit)
 
 for post in posts:
     try:
@@ -55,6 +59,7 @@ for post in posts:
         comments = post.comments.list()[: args.comment_limit]
         records.append({
             "id": post.id,
+            "session" : args.session,
             "title": post.title,
             "selftext": post.selftext,
             "score": post.score,
@@ -76,6 +81,10 @@ for post in posts:
     except Exception as e:
         logging.warning(f"Skipping post {post.id} due to error: {e}")
 
+safeRaceName = race_name.replace(" ", "_")
+fileName = f"f1_{safeRaceName.lower()}_{args.session.lower()}_reddit.csv"
+
 df = pd.DataFrame(records)
-df.to_csv(args.output, index=False)
-logging.info(f"Wrote {len(df)} records to {args.output}")
+df.to_csv(fileName, index=False)
+
+logging.info(f"Wrote {len(df)} records to {fileName}")
