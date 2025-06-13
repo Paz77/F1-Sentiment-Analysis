@@ -1,6 +1,4 @@
-from ast import Dict
 import os
-from pandas.core.computation.ops import Op
 import praw
 import logging
 import argparse
@@ -38,17 +36,33 @@ class RedditScraper:
                 url = f"https://api.jolpi.ca/ergast/f1/{year}/last.json"
             else:
                 url = "https://api.jolpi.ca/ergast/f1/current/next.json"
-                
+            
+            print(f"DEBUG: Fetching race info from: {url}")
             resp = requests.get(url)
             resp.raise_for_status()
-            data = resp.json()["MRData"]["RaceTable"]["Races"][0]
-            return {
+            
+            json_data = resp.json()
+            print(f"DEBUG: API Response keys: {json_data.keys()}")
+            
+            races = json_data["MRData"]["RaceTable"]["Races"]
+            if not races:
+                raise ValueError(f"No race data found for year {year}, round {round}")
+            
+            data = races[0]
+            race_info = {
                 "race_name" : data["raceName"],
                 "circuit_name" : data["Circuit"]["circuitName"],
                 "date" : data["date"]
             }
+            print(f"DEBUG: Race info found: {race_info}")
+            return race_info
+            
         except requests.RequestException as e:
             logging.error(f"Error fetching race info: {e}")
+            raise
+        except (KeyError, IndexError) as e:
+            logging.error(f"Error parsing race data: {e}")
+            print(f"DEBUG: Full API response: {resp.text}")
             raise
 
 class SessionKeywords:
@@ -80,26 +94,27 @@ def ValidateEnvVars() -> None:
     requiredVars = ["CLIENT_ID", "CLIENT_SECRET", "USER_AGENT"]
     missingVars = [var for var in requiredVars if not os.getenv(var)]
     if missingVars:
-        raise ValueError(f"Missing required environtment variable")
+        raise ValueError(f"Missing required environment variables: {missingVars}")
 
 def CreateFileName(raceName: str, session: str) -> str:
     """Creates a file name from race name & session"""
-    safeName = raceName.replace(" ", "_").lower();
+    safeName = raceName.replace(" ", "_").lower()
     return f"f1_{safeName}_{session.lower()}_reddit.csv"
 
-def ProcessPost(post: Submission, session: str) -> Dict:
+def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[Dict]:
     """
     Processes a Reddit post and its comments.
     Args:
         post: Reddit Submission object
         session: Session type
+        comment_limit: Maximum number of comments to fetch
         
     Returns:
         Dictionary containing post and comment data
     """
     try:
         post.comments.replace_more(limit=0)
-        comments = post.comments.list()
+        comments = post.comments.list()[:comment_limit]
 
         postData = {
             "id": post.id,
@@ -111,7 +126,9 @@ def ProcessPost(post: Submission, session: str) -> Dict:
             "permalink": post.permalink,
             "author": getattr(post.author, "name", None),
             "num_comments": post.num_comments,
+            "type": "post"
         }
+        
         commentData = []
         for comment in comments:
             commentData.append({
@@ -122,8 +139,12 @@ def ProcessPost(post: Submission, session: str) -> Dict:
                 "score": comment.score,
                 "created": datetime.fromtimestamp(comment.created_utc).isoformat(),
                 "author": getattr(comment.author, "name", None),
+                "session": session,
+                "type": "comment"  
             })
-        return {"posts" : postData, "comments" : commentData}
+        
+        return {"posts": postData, "comments": commentData}
+        
     except Exception as e:
         logging.warning(f"Error processing post {post.id}: {e}")
         return None
@@ -147,6 +168,8 @@ def main():
     args = parser.parse_args()
 
     try:
+        print(f"DEBUG: Starting scraper with args: {args}")
+        
         scraper = RedditScraper(
             client_id=os.getenv("CLIENT_ID"),
             client_secret=os.getenv("CLIENT_SECRET"),
@@ -154,30 +177,72 @@ def main():
         )
 
         raceInfo = scraper.GetRaceInfo(args.year, args.round)
-        raceDatetime = datetime.fromisoformat(raceInfo["date"])
-        endDatetime = raceDatetime + timedelta(days=3)
+        raceDatetime = datetime.fromisoformat(raceInfo["date"]).replace(tzinfo=timezone.utc)
+        endDatetime = raceDatetime + timedelta(days=7)
+        startDateTime = raceDatetime - timedelta(days=2)
+        
+        print(f"DEBUG: Race date range: {raceDatetime} to {endDatetime}")
 
         keywords = SessionKeywords.GetKeywords(args.session)
         if not keywords:
             raise ValueError(f"Invalid session type: {args.session}")
 
-        query = " OR ".join(keywords)
+        start_epoch = int(startDateTime.timestamp())
+        end_epoch = int(endDatetime.timestamp())
+
+        query = (f'timestamp{start_epoch}..{end_epoch}'
+                 f'"{raceInfo["race_name"]}"'
+                 f'({" OR ".join(keywords)})')
+        print(f"DEBUG: Search query: {query}")
+        
         sub = scraper.reddit.subreddit(args.subreddit)
+        print(f"DEBUG: Searching subreddit: {args.subreddit}")
 
         records = []
-        for post in sub.search(query, time_filter="week", sort="top", limit=args.post_limit):
-            result = ProcessPost(post, args.session)
+        posts_found = 0
+        posts_in_date_range = 0
+        posts_processed = 0
+        
+        for post in sub.search(query, syntax="cloudsearch", sort="new", limit=args.post_limit * 2):
+            posts_found += 1
+            record_time = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+            
+            print(f"DEBUG: Post {posts_found}: '{post.title}' created at {record_time}")
+            
+            posts_in_date_range += 1
+            print(f"DEBUG: Post {posts_found} is in date range, processing...")
+            
+            result = ProcessPost(post, args.session, args.comment_limit)
             if result:
+                posts_processed += 1
                 records.append(result["posts"])
-                records.extend(result["comments"][:args.comment_limit])
+                records.extend(result["comments"])
+                print(f"DEBUG: Added {1 + len(result['comments'])} records from post {posts_found}")
 
-        df = pd.DataFrame(records)
+        print(f"DEBUG: Summary:")
+        print(f"  - Total posts found: {posts_found}")
+        print(f"  - Posts in date range: {posts_in_date_range}")
+        print(f"  - Posts successfully processed: {posts_processed}")
+        print(f"  - Total records to write: {len(records)}")
+
+        if not records:
+            print("WARNING: No records found. Creating empty CSV file.")
+            df = pd.DataFrame(columns=[
+                "id", "session", "title", "selftext", "score", "created", 
+                "permalink", "author", "num_comments", "type"
+            ])
+        else:
+            df = pd.DataFrame(records)
+        
         filename = CreateFileName(raceInfo["race_name"], args.session)
         df.to_csv(filename, index=False)
 
         logging.info(f"Successfully wrote {len(df)} records to {filename}")
+        print(f"DEBUG: File {filename} created with {len(df)} records")
+        
     except Exception as e:
         logging.error(f"Error in main: {e}")
+        print(f"DEBUG: Exception details: {type(e).__name__}: {e}")
         raise
 
 if __name__ == "__main__":
