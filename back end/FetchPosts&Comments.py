@@ -4,7 +4,7 @@ import logging
 import argparse
 import requests
 import pandas as pd
-from datetime import datetime, timezone, timedelta
+from datetime import date, timezone, timedelta, datetime
 from dotenv import load_dotenv, find_dotenv
 from typing import List, Dict, Optional
 from praw.models import Submission
@@ -30,12 +30,11 @@ class RedditScraper:
             Dictionary containing race information
         """
         try:
-            if year is not None and round is not None:
+            year = year or date.today().year
+            if round is not None:
                 url = f"https://api.jolpi.ca/ergast/f1/{year}/{round}.json"
-            elif year is not None:
-                url = f"https://api.jolpi.ca/ergast/f1/{year}/last.json"
             else:
-                url = "https://api.jolpi.ca/ergast/f1/current/next.json"
+                url = f"https://api.jolpi.ca/ergast/f1/{year}/last.json"
             
             print(f"DEBUG: Fetching race info from: {url}")
             resp = requests.get(url)
@@ -175,55 +174,31 @@ def main():
             client_secret=os.getenv("CLIENT_SECRET"),
             user_agent=os.getenv("USER_AGENT")
         )
-
+        sub = scraper.reddit.subreddit(args.subreddit)
         raceInfo = scraper.GetRaceInfo(args.year, args.round)
-        raceDatetime = datetime.fromisoformat(raceInfo["date"]).replace(tzinfo=timezone.utc)
-        endDatetime = raceDatetime + timedelta(days=7)
-        startDateTime = raceDatetime - timedelta(days=2)
-        
-        print(f"DEBUG: Race date range: {raceDatetime} to {endDatetime}")
 
         keywords = SessionKeywords.GetKeywords(args.session)
         if not keywords:
             raise ValueError(f"Invalid session type: {args.session}")
 
-        start_epoch = int(startDateTime.timestamp())
-        end_epoch = int(endDatetime.timestamp())
+        race_date = datetime.strptime(raceInfo["date"], "%Y-%m-%d")
+        race_start_dt = race_date.replace(tzinfo=timezone.utc)
+        race_end_dt = race_start_dt + timedelta(days=1)
 
-        query = (f'timestamp{start_epoch}..{end_epoch}'
-                 f'"{raceInfo["race_name"]}"'
-                 f'({" OR ".join(keywords)})')
-        print(f"DEBUG: Search query: {query}")
-        
-        sub = scraper.reddit.subreddit(args.subreddit)
-        print(f"DEBUG: Searching subreddit: {args.subreddit}")
+        start_epoch = int(race_start_dt.timestamp())
+        end_epoch = int(race_end_dt.timestamp())
 
         records = []
-        posts_found = 0
-        posts_in_date_range = 0
-        posts_processed = 0
-        
-        for post in sub.search(query, syntax="cloudsearch", sort="new", limit=args.post_limit * 2):
-            posts_found += 1
-            record_time = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
-            
-            print(f"DEBUG: Post {posts_found}: '{post.title}' created at {record_time}")
-            
-            posts_in_date_range += 1
-            print(f"DEBUG: Post {posts_found} is in date range, processing...")
-            
-            result = ProcessPost(post, args.session, args.comment_limit)
-            if result:
-                posts_processed += 1
-                records.append(result["posts"])
-                records.extend(result["comments"])
-                print(f"DEBUG: Added {1 + len(result['comments'])} records from post {posts_found}")
+        for post in sub.new(limit=None):
+            t = post.created_utc
+            if t < start_epoch:
+                break
 
-        print(f"DEBUG: Summary:")
-        print(f"  - Total posts found: {posts_found}")
-        print(f"  - Posts in date range: {posts_in_date_range}")
-        print(f"  - Posts successfully processed: {posts_processed}")
-        print(f"  - Total records to write: {len(records)}")
+            if start_epoch <= t <= end_epoch and any(kw in post.title.lower() for kw in keywords):
+                rec = ProcessPost(post, args.session, args.comment_limit)
+                if rec:
+                    records.append(rec["posts"])
+                    records.extend(rec["comments"])
 
         if not records:
             print("WARNING: No records found. Creating empty CSV file.")
