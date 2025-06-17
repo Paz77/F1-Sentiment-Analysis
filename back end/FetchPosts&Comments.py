@@ -166,6 +166,14 @@ def main():
     parser.add_argument("--round", type=int, default=None, help="Round number of the race")
     args = parser.parse_args()
 
+    SESSION_DAY_OFFSET = {
+        "FP1" : -3,
+        "FP2" : -2,
+        "F3" : -1,
+        "QUALIFYING" : -1,
+        "RACE" : 0
+    }
+
     try:
         print(f"DEBUG: Starting scraper with args: {args}")
         
@@ -182,11 +190,11 @@ def main():
             raise ValueError(f"Invalid session type: {args.session}")
 
         race_date = datetime.strptime(raceInfo["date"], "%Y-%m-%d")
-        race_start_dt = race_date.replace(tzinfo=timezone.utc)
-        race_end_dt = race_start_dt + timedelta(days=1)
-
-        start_epoch = int(race_start_dt.timestamp())
-        end_epoch = int(race_end_dt.timestamp())
+        offset_days = SESSION_DAY_OFFSET[args.session.upper()]
+        session_start = (race_date + timedelta(days=offset_days)).replace(tzinfo=timezone.utc)
+        session_end = session_start + timedelta(days=1)
+        start_epoch = int(session_start.timestamp())
+        end_epoch = int(session_end.timestamp())
 
         records = []
         for post in sub.new(limit=None):
