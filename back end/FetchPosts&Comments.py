@@ -49,9 +49,11 @@ class RedditScraper:
             
             data = races[0]
             race_info = {
-                "race_name" : data["raceName"],
-                "circuit_name" : data["Circuit"]["circuitName"],
-                "date" : data["date"]
+                "race_name": data["raceName"],
+                "circuit_name": data["Circuit"]["circuitName"],
+                "date": data["date"],
+                "year": year,
+                "round": data["round"]
             }
             print(f"DEBUG: Race info found: {race_info}")
             return race_info
@@ -66,11 +68,11 @@ class RedditScraper:
 
 class SessionKeywords:
     SESSION_MAP = {
-        "FP1": ["fp1", "free practice 1"],
-        "FP2": ["fp2", "free practice 2"],
-        "FP3": ["fp3", "free practice 3"],
-        "QUALIFYING": ["quali", "qualifying"],
-        "RACE": ["race", "grand prix", "gp", "race thread"]
+        "FP1": ["fp1", "free practice 1", "practice 1"],
+        "FP2": ["fp2", "free practice 2", "practice 2"], 
+        "FP3": ["fp3", "free practice 3", "practice 3"],
+        "QUALIFYING": ["quali", "qualifying", "q1", "q2", "q3"],
+        "RACE": ["race", "grand prix", "gp", "race thread", "race discussion"]
     }
 
     @classmethod
@@ -95,10 +97,10 @@ def ValidateEnvVars() -> None:
     if missingVars:
         raise ValueError(f"Missing required environment variables: {missingVars}")
 
-def CreateFileName(raceName: str, session: str) -> str:
+def CreateFileName(raceName: str, session: str, year: int) -> str:
     """Creates a file name from race name & session"""
-    safeName = raceName.replace(" ", "_").lower()
-    return f"f1_{safeName}_{session.lower()}_reddit.csv"
+    safeName = raceName.replace(" ", "_").replace("'", "").lower()
+    return f"f1_{year}_{safeName}_{session.lower()}_reddit.csv"
 
 def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[Dict]:
     """
@@ -167,11 +169,11 @@ def main():
     args = parser.parse_args()
 
     SESSION_DAY_OFFSET = {
-        "FP1" : -3,
-        "FP2" : -2,
-        "F3" : -1,
-        "QUALIFYING" : -1,
-        "RACE" : 0
+        "FP1": -3,
+        "FP2": -2,
+        "FP3": -1,  
+        "QUALIFYING": -1,
+        "RACE": 0
     }
 
     try:
@@ -182,31 +184,109 @@ def main():
             client_secret=os.getenv("CLIENT_SECRET"),
             user_agent=os.getenv("USER_AGENT")
         )
-        sub = scraper.reddit.subreddit(args.subreddit)
+        
         raceInfo = scraper.GetRaceInfo(args.year, args.round)
+        sub = scraper.reddit.subreddit(args.subreddit)
 
         keywords = SessionKeywords.GetKeywords(args.session)
         if not keywords:
             raise ValueError(f"Invalid session type: {args.session}")
 
         race_date = datetime.strptime(raceInfo["date"], "%Y-%m-%d")
-        offset_days = SESSION_DAY_OFFSET[args.session.upper()]
+        offset_days = SESSION_DAY_OFFSET.get(args.session.upper(), 0)
         session_start = (race_date + timedelta(days=offset_days)).replace(tzinfo=timezone.utc)
         session_end = session_start + timedelta(days=1)
         start_epoch = int(session_start.timestamp())
         end_epoch = int(session_end.timestamp())
+        
+        print(f"DEBUG: Race date: {race_date}")
+        print(f"DEBUG: Session date range: {session_start} to {session_end}")
+        print(f"DEBUG: Epoch range: {start_epoch} to {end_epoch}")
+        print(f"DEBUG: Keywords: {keywords}")
 
         records = []
-        for post in sub.new(limit=None):
-            t = post.created_utc
-            if t < start_epoch:
-                break
+        posts_checked = 0
+        posts_in_date_range = 0
+        posts_matched = 0
+        
+        race_name_clean = raceInfo["race_name"].replace("Grand Prix", "").strip()
+        search_queries = [
+            f'"{raceInfo["race_name"]}"',
+            f'"{race_name_clean}"',
+            f'"{raceInfo["race_name"]}" {args.session.lower()}',
+            f'{race_name_clean} {args.session.lower()}'
+        ]
+        
+        for query in search_queries:
+            print(f"DEBUG: Searching with query: {query}")
+            try:
+                for post in sub.search(query, time_filter="all", sort="top", limit=args.post_limit):
+                    posts_checked += 1
+                    post_time = post.created_utc
+                    post_datetime = datetime.fromtimestamp(post_time, tz=timezone.utc)
+                    
+                    print(f"DEBUG: Post {posts_checked}: '{post.title[:60]}...' created at {post_datetime}")
+                    
+                    if start_epoch <= post_time <= end_epoch:
+                        posts_in_date_range += 1
+                        print(f"DEBUG: Post {posts_checked} is in date range")
+                        
+                        title_lower = post.title.lower()
+                        if any(kw in title_lower for kw in keywords):
+                            posts_matched += 1
+                            print(f"DEBUG: Post {posts_checked} matches keywords, processing...")
+                            
+                            rec = ProcessPost(post, args.session, args.comment_limit)
+                            if rec:
+                                records.append(rec["posts"])
+                                records.extend(rec["comments"])
+                                print(f"DEBUG: Added {1 + len(rec['comments'])} records from post {posts_checked}")
+                        else:
+                            print(f"DEBUG: Post {posts_checked} doesn't match keywords: {title_lower}")
+                    else:
+                        print(f"DEBUG: Post {posts_checked} outside date range")
+                        
+            except Exception as e:
+                print(f"DEBUG: Error searching with query '{query}': {e}")
+                continue
+        
+        # Method 2: Browse recent posts if search didn't find much
+        if posts_matched < 5:
+            print(f"DEBUG: Only found {posts_matched} posts via search, trying recent posts...")
+            try:
+                for post in sub.new(limit=1000):  # Check more recent posts
+                    posts_checked += 1
+                    post_time = post.created_utc
+                    
+                    if post_time < start_epoch - 86400 * 7:  # Stop if more than a week before
+                        break
+                        
+                    if start_epoch <= post_time <= end_epoch:
+                        posts_in_date_range += 1
+                        title_lower = post.title.lower()
+                        
+                        # More flexible matching for race names
+                        race_name_parts = race_name_clean.lower().split()
+                        if (any(kw in title_lower for kw in keywords) and 
+                            (any(part in title_lower for part in race_name_parts) or 
+                             raceInfo["race_name"].lower() in title_lower)):
+                            
+                            posts_matched += 1
+                            print(f"DEBUG: Found matching post via new(): '{post.title[:60]}...'")
+                            
+                            rec = ProcessPost(post, args.session, args.comment_limit)
+                            if rec:
+                                records.append(rec["posts"])
+                                records.extend(rec["comments"])
+                                
+            except Exception as e:
+                print(f"DEBUG: Error browsing new posts: {e}")
 
-            if start_epoch <= t <= end_epoch and any(kw in post.title.lower() for kw in keywords):
-                rec = ProcessPost(post, args.session, args.comment_limit)
-                if rec:
-                    records.append(rec["posts"])
-                    records.extend(rec["comments"])
+        print(f"DEBUG: Search Summary:")
+        print(f"  - Total posts checked: {posts_checked}")
+        print(f"  - Posts in date range: {posts_in_date_range}")
+        print(f"  - Posts matched keywords: {posts_matched}")
+        print(f"  - Total records collected: {len(records)}")
 
         if not records:
             print("WARNING: No records found. Creating empty CSV file.")
@@ -217,7 +297,7 @@ def main():
         else:
             df = pd.DataFrame(records)
         
-        filename = CreateFileName(raceInfo["race_name"], args.session)
+        filename = CreateFileName(raceInfo["race_name"], args.session, int(raceInfo["year"]))
         df.to_csv(filename, index=False)
 
         logging.info(f"Successfully wrote {len(df)} records to {filename}")
