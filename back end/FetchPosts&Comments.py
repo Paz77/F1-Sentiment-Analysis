@@ -67,12 +67,27 @@ class RedditScraper:
             raise
 
 class SessionKeywords:
-    SESSION_MAP = {
-        "FP1": ["fp1", "free practice 1", "practice 1"],
-        "FP2": ["fp2", "free practice 2", "practice 2"], 
-        "FP3": ["fp3", "free practice 3", "practice 3"],
-        "QUALIFYING": ["quali", "qualifying", "q1", "q2", "q3"],
-        "RACE": ["race", "grand prix", "gp", "race thread", "race discussion"]
+    SESSION_CONFIG = {
+        "FP1" : {
+            "keywords" : [],
+            "offset_days" : 
+        },
+        "FP2" : {
+            "keywords" : [],
+            "offset_days" : 
+        },
+        "FP3" : {
+            "keywords" : [],
+            "offset_days" : 
+        },
+        "QUALIFYING" : {
+            "keywords" : [],
+            "offset_days" : 
+        },
+        "RACE" : {
+            "keywords" : [],
+            "offset_days" : 
+        }
     }
 
     @classmethod
@@ -167,14 +182,6 @@ def main():
     parser.add_argument("--year", type=int, default=None, help="Year of the race")
     parser.add_argument("--round", type=int, default=None, help="Round number of the race")
     args = parser.parse_args()
-
-    SESSION_DAY_OFFSET = {
-        "FP1": -3,
-        "FP2": -2,
-        "FP3": -1,  
-        "QUALIFYING": -1,
-        "RACE": 0
-    }
 
     try:
         print(f"DEBUG: Starting scraper with args: {args}")
