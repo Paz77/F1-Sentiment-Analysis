@@ -9,6 +9,29 @@ from dotenv import load_dotenv, find_dotenv
 from typing import List, Dict, Optional
 from praw.models import Submission
 
+SESSION_CONFIG = {
+    "FP1": {
+        "keywords": ["fp1", "free practice 1", "practice 1"],
+        "offset_days": -3
+    },
+    "FP2": {
+        "keywords": ["fp2", "free practice 2", "practice 2"],
+        "offset_days": -2
+    },
+    "FP3": {
+        "keywords": ["fp3", "free practice 3", "practice 3"],
+        "offset_days": -1
+    },
+    "QUALIFYING": {
+        "keywords": ["quali", "qualifying", "q1", "q2", "q3"],
+        "offset_days": -1
+    },
+    "RACE": {
+        "keywords": ["race", "grand prix", "gp", "race thread", "race discussion"],
+        "offset_days": 0
+    }
+}
+
 class RedditScraper:
     def __init__(self, client_id: str, client_secret: str, user_agent: str):
         """
@@ -65,45 +88,6 @@ class RedditScraper:
             logging.error(f"Error parsing race data: {e}")
             print(f"DEBUG: Full API response: {resp.text}")
             raise
-
-class SessionKeywords:
-    SESSION_CONFIG = {
-        "FP1" : {
-            "keywords" : [],
-            "offset_days" : 
-        },
-        "FP2" : {
-            "keywords" : [],
-            "offset_days" : 
-        },
-        "FP3" : {
-            "keywords" : [],
-            "offset_days" : 
-        },
-        "QUALIFYING" : {
-            "keywords" : [],
-            "offset_days" : 
-        },
-        "RACE" : {
-            "keywords" : [],
-            "offset_days" : 
-        }
-    }
-
-    @classmethod
-    def GetKeywords(cls, session: str) -> List[str]:
-        """
-        Gets keywords for a certain session, i.e., fp1, quali, grand prix
-        Args:
-            session: Session type (FP1, FP2, FP3, Qualifying, Race)
-        Returns:
-            List of keywords for the session
-        """
-        session = session.upper()
-        keywords = cls.SESSION_MAP.get(session, [])
-        if not keywords:
-            logging.warning(f"No keywords found for session type: {session}")
-        return keywords
 
 def ValidateEnvVars() -> None:
     """Validates the required env variables"""
@@ -195,12 +179,14 @@ def main():
         raceInfo = scraper.GetRaceInfo(args.year, args.round)
         sub = scraper.reddit.subreddit(args.subreddit)
 
-        keywords = SessionKeywords.GetKeywords(args.session)
-        if not keywords:
-            raise ValueError(f"Invalid session type: {args.session}")
+        session_upper = args.session.upper()
+        if session_upper not in SESSION_CONFIG:
+            raise ValueError(f"Invalid session type: {args.session}. Valid options are: {list(SESSION_CONFIG.keys())}")
+        
+        keywords = SESSION_CONFIG[session_upper]['keywords']
+        offset_days = SESSION_CONFIG[session_upper]['offset_days']
 
         race_date = datetime.strptime(raceInfo["date"], "%Y-%m-%d")
-        offset_days = SESSION_DAY_OFFSET.get(args.session.upper(), 0)
         session_start = (race_date + timedelta(days=offset_days)).replace(tzinfo=timezone.utc)
         session_end = session_start + timedelta(days=1)
         start_epoch = int(session_start.timestamp())
