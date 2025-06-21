@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+from urllib import request, response
 import requests
 import argparse
 import json
@@ -12,6 +13,7 @@ import time
 class F1BatchScraper:
     def __init__(self, script_path: str = "back end/FetchPosts&Comments.py"):
         self.script_path = script_path
+        self.sessions = ["Race"]
     
     def get_completed_races(self, year: int) -> List[Dict]:
         """
@@ -19,6 +21,7 @@ class F1BatchScraper:
         """
         try:
             url = f"https://api.jolpi.ca/ergast/f1/{year}.json"
+            print(f"fetching data from: {url}")
 
             response = requests.get(url)
             response.raise_for_status()
@@ -27,7 +30,7 @@ class F1BatchScraper:
             races = data["MRData"]["RaceTable"]["Races"]
 
             current_date = datetime.now().date()
-            comepleted_races = []
+            completed_races = []
             
             for race in races:
                 race_date = datetime.strptime(race["date"], "%Y-%m-%d").date()
@@ -40,9 +43,10 @@ class F1BatchScraper:
                         "date" : race["date"],
                         "year" : year
                     }
-                    comepleted_races.append(race_info)
+                    completed_races.append(race_info)
 
-            return comepleted_races
+            print(f"Found {len(completed_races)} completed races")
+            return completed_races
         
         except requests.RequestException as e:
             print(f"Error fetching race calendar: {e}")
@@ -136,12 +140,11 @@ class F1BatchScraper:
                     session=session, 
                     **scraper_params
                 )
-
-        if success:
-            stats["successful"] += 1
-        else:
-            stats["failed"] -= 1
-
+                if success:
+                    stats["successful"] += 1
+                else:
+                    stats["failed"] += 1
+        
         return stats
     
     def scrape_specific_race(self, race_configs: List[Dict], **scraper_params) -> Dict[str, int]:
@@ -185,7 +188,7 @@ def main():
     parser.add_argument("--start_round", type=int, default=1, help="Starting round number (default: 1)")
     parser.add_argument("--end_round", type=int, default=None, help="Ending round number (default: all completed)")
 
-    parser.add_argument("--sessions", nargs="+", choices=["FP1", "FP2", "FP3", "Qualifying", "Race"], default="Race", help="Sessions to scrape (default: Race only)")
+    parser.add_argument("--sessions", nargs="+", choices=["FP1", "FP2", "FP3", "Qualifying", "Race"], default=["FP1", "FP2", "FP3", "Qualifying", "Race"], help="Sessions to scrape (default: Race only)")
 
     parser.add_argument("--script_path", default="back end/FetchPosts&Comments.py", help="Path to FetchPosts&Comments.py script")
     parser.add_argument("--subreddit", default="formula1", help="subreddit to scrape")
@@ -214,7 +217,7 @@ def main():
 
                 year_stats = scraper.scrape_all_races(
                     year=year,
-                    sessions=args.session,
+                    sessions=args.sessions,
                     **scraper_params
                 )
                 for key in total_stats:
@@ -238,7 +241,7 @@ def main():
                 sys.exit(1)
 
             race_configs = json.loads(args.configs)
-            stats = scraper.scrape_specific_races(race_configs, **scraper_params)
+            stats = scraper.scrape_specific_race(race_configs, **scraper_params)
 
         print("\n" + "=" * 60)
         print("FINAL SUMMARY")
