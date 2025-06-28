@@ -2,36 +2,38 @@ import os
 import praw
 import logging
 import argparse
+from prawcore import session
 import requests
 import pandas as pd
 from datetime import date, timezone, timedelta, datetime
 from dotenv import load_dotenv, find_dotenv
 from typing import List, Dict, Optional
 from praw.models import Submission
+from sqlalchemy import String
 
 SESSION_CONFIG = {
     "FP1": {
         "keywords": ["fp1", "free practice 1", "practice 1"],
-        "offset_days": -3
     },
     "FP2": {
         "keywords": ["fp2", "free practice 2", "practice 2"],
-        "offset_days": -2
     },
     "FP3": {
         "keywords": ["fp3", "free practice 3", "practice 3"],
-        "offset_days": -1
     },
+    "SPRINT QUALIFYING": {
+        "keywords": ["sprint qualifying", "sprint shootout", "sprint quali", "sprint q"],
+    },
+    "SPRINT": {
+        "keywords": ["sprint", "sprint race"],
+    }, 
     "QUALIFYING": {
         "keywords": ["quali", "qualifying", "q1", "q2", "q3"],
-        "offset_days": -1
     },
     "RACE": {
         "keywords": ["race", "grand prix", "gp", "race thread", "race discussion"],
-        "offset_days": 0
     }
 }
-
 class RedditScraper:
     def __init__(self, client_id: str, client_secret: str, user_agent: str):
         """
@@ -72,13 +74,10 @@ class RedditScraper:
             
             data = races[0]
             race_info = {
-                "race_name": data["raceName"],
-                "circuit_name": data["Circuit"]["circuitName"],
-                "date": data["date"],
-                "year": year,
-                "round": data["round"]
+                "Races" : data
             }
             print(f"DEBUG: Race info found: {race_info}")
+            print(f"DEBUG: Available session keys: {[k for k in data.keys() if k in ['FirstPractice', 'SecondPractice', 'ThirdPractice', 'Sprint', 'SprintQualifying', 'Qualifying', 'Race']]}")
             return race_info
             
         except requests.RequestException as e:
@@ -88,6 +87,18 @@ class RedditScraper:
             logging.error(f"Error parsing race data: {e}")
             print(f"DEBUG: Full API response: {resp.text}")
             raise
+
+    def IsSprintWeekend(self, race_data: dict) -> bool:
+        """
+        Determines if race weekend is a sprint weekend
+        """
+        if 'Sprint' in race_data or 'SprintQualifying' in race_data:
+            print("DEBUG: Found 'Sprint' / 'SprintQualifying' in race_data")
+            print("Sprint Weekend!")
+            return True
+
+        print("DEBUG: Normal Weekend!")
+        return False
 
 def ValidateEnvVars() -> None:
     """Validates the required env variables"""
@@ -100,6 +111,47 @@ def CreateFileName(raceName: str, session: str, year: int) -> str:
     """Creates a file name from race name & session"""
     safeName = raceName.replace(" ", "_").replace("'", "").lower()
     return f"f1_{year}_{safeName}_{session.lower()}_reddit.csv"
+
+def GetSessionDates(race_data: dict) -> dict:
+    """
+    Extracts session dynamically from the API response
+    """
+    session_dates = {}
+
+    print(f"DEBUG: Extracting session dates from race data")
+    print(f"DEBUG: Top-level keys: {list(race_data.keys())}")
+
+    session_objects = ['FP1', 'FP2', 'FP3', 'Qualifying', 'Race', 'Sprint', 'SprintQualifying']
+    for session in session_objects:
+        if session in race_data:
+            session_data = race_data[session]
+            if isinstance(session_data, dict) and 'date' in session_data:
+                session_dates[session] = session_data['date']
+                print(f"DEBUG: Found {session} on {session_data['date']}")
+
+    if 'Sessions' in race_data:
+        sessions = race_data['Sessions']
+        if isinstance(sessions, list):
+            session_type = session.get('type', 'Unknown')
+            session_date = session.get('date')
+            if session_date:
+                session_dates[session_type] = session_date
+                print(f"Fount {session_type} on session_date")
+
+    if 'Sprint' in race_data:
+        sprint_data = race_data['Sprint']
+        if isinstance(sprint_data, dict) and 'date' in sprint_data:
+            session_dates['Sprint'] = sprint_data['date']
+            print(f"DEBUG: Found Sprint on {sprint_data['date']}")
+    
+    if 'SprintQualifying' in race_data:
+        sprint_qual_data = race_data['SprintQualifying']
+        if isinstance(sprint_qual_data, dict) and 'date' in sprint_qual_data:
+            session_dates['Sprint Qualifying'] = sprint_qual_data['date']
+            print(f"DEBUG: Found Sprint Qualifying on {sprint_qual_data['date']}")
+
+    print(f"DEBUG: Final session dates: {session_dates}")
+    return session_dates
 
 def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[Dict]:
     """
@@ -153,6 +205,19 @@ def main():
     load_dotenv(find_dotenv())
     ValidateEnvVars()
 
+    scraper = RedditScraper(
+        client_id=os.getenv("CLIENT_ID"),
+        client_secret=os.getenv("CLIENT_SECRET"),
+        user_agent=os.getenv("USER_AGENT")
+    )
+
+    race_data = scraper.GetRaceInfo(2025, 6)
+    session_dates = GetSessionDates(race_data)
+
+    """
+    load_dotenv(find_dotenv())
+    ValidateEnvVars()
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s"
@@ -175,9 +240,10 @@ def main():
             client_secret=os.getenv("CLIENT_SECRET"),
             user_agent=os.getenv("USER_AGENT")
         )
-        
+                
         raceInfo = scraper.GetRaceInfo(args.year, args.round)
         sub = scraper.reddit.subreddit(args.subreddit)
+        scraper.IsSprintWeekend(raceInfo)
 
         session_upper = args.session.upper()
         if session_upper not in SESSION_CONFIG:
@@ -243,7 +309,6 @@ def main():
                 print(f"DEBUG: Error searching with query '{query}': {e}")
                 continue
         
-        # Method 2: Browse recent posts if search didn't find much
         if posts_matched < 5:
             print(f"DEBUG: Only found {posts_matched} posts via search, trying recent posts...")
             try:
@@ -300,6 +365,7 @@ def main():
         logging.error(f"Error in main: {e}")
         print(f"DEBUG: Exception details: {type(e).__name__}: {e}")
         raise
+    """
 
 if __name__ == "__main__":
     main()
