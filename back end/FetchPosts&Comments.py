@@ -45,60 +45,60 @@ class RedditScraper:
             user_agent = user_agent
         )
     
-    def GetRaceInfo(self, year: Optional[int] = None, round: Optional[int] = None) -> Dict:
-        """
-        Fetch race info from Ergast API.
-        Args:
-            year: optionally add which f1 year
-            round: optionally add which f1 race 
-        Returns:
-            Dictionary containing race information
-        """
-        try:
-            year = year or date.today().year
-            if round is not None:
-                url = f"https://api.jolpi.ca/ergast/f1/{year}/{round}.json"
-            else:
-                url = f"https://api.jolpi.ca/ergast/f1/{year}/last.json"
+def GetRaceInfo(year: Optional[int] = None, round: Optional[int] = None) -> Dict:
+    """
+    Fetch race info from Ergast API.
+    Args:
+        year: optionally add which f1 year
+        round: optionally add which f1 race 
+    Returns:
+        Dictionary containing race information
+    """
+    try:
+        year = year or date.today().year
+        if round is not None:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/{round}.json"
+        else:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/last.json"
             
-            print(f"DEBUG: Fetching race info from: {url}")
-            resp = requests.get(url)
-            resp.raise_for_status()
+        print(f"DEBUG: Fetching race info from: {url}")
+        resp = requests.get(url)
+        resp.raise_for_status()
             
-            json_data = resp.json()
-            print(f"DEBUG: API Response keys: {json_data.keys()}")
+        json_data = resp.json()
+        print(f"DEBUG: API Response keys: {json_data.keys()}")
             
-            races = json_data["MRData"]["RaceTable"]["Races"]
-            if not races:
-                raise ValueError(f"No race data found for year {year}, round {round}")
+        races = json_data["MRData"]["RaceTable"]["Races"]
+        if not races:
+            raise ValueError(f"No race data found for year {year}, round {round}")
             
-            data = races[0]
-            race_info = {
-                "Races" : data
-            }
-            print(f"DEBUG: Race info found: {race_info}")
-            print(f"DEBUG: Available session keys: {[k for k in data.keys() if k in ['FirstPractice', 'SecondPractice', 'ThirdPractice', 'Sprint', 'SprintQualifying', 'Qualifying', 'Race']]}")
-            return race_info
+        data = races[0]
+        race_info = {
+            "Races" : data
+        }
+        print(f"DEBUG: Race info found: {race_info}")
+        print(f"DEBUG: Available session keys: {[k for k in data.keys() if k in ['FirstPractice', 'SecondPractice', 'ThirdPractice', 'Sprint', 'SprintQualifying', 'Qualifying', 'Race']]}")
+        return race_info
             
-        except requests.RequestException as e:
-            logging.error(f"Error fetching race info: {e}")
-            raise
-        except (KeyError, IndexError) as e:
-            logging.error(f"Error parsing race data: {e}")
-            print(f"DEBUG: Full API response: {resp.text}")
-            raise
+    except requests.RequestException as e:
+        logging.error(f"Error fetching race info: {e}")
+        raise
+    except (KeyError, IndexError) as e:
+        logging.error(f"Error parsing race data: {e}")
+        print(f"DEBUG: Full API response: {resp.text}")
+        raise
 
-    def IsSprintWeekend(self, race_data: dict) -> bool:
-        """
-        Determines if race weekend is a sprint weekend
-        """
-        if 'Sprint' in race_data or 'SprintQualifying' in race_data:
-            print("DEBUG: Found 'Sprint' / 'SprintQualifying' in race_data")
-            print("Sprint Weekend!")
-            return True
+def IsSprintWeekend(race_data: dict) -> bool: #might not actually need this 
+    """
+    Determines if race weekend is a sprint weekend
+    """
+    if 'Sprint' in race_data or 'SprintQualifying' in race_data:
+        print("DEBUG: Found 'Sprint' / 'SprintQualifying' in race_data")
+        print("Sprint Weekend!")
+        return True
 
-        print("DEBUG: Normal Weekend!")
-        return False
+    print("DEBUG: Normal Weekend!")
+    return False
 
 def ValidateEnvVars() -> None:
     """Validates the required env variables"""
@@ -107,10 +107,10 @@ def ValidateEnvVars() -> None:
     if missingVars:
         raise ValueError(f"Missing required environment variables: {missingVars}")
 
-def CreateFileName(raceName: str, session: str, year: int) -> str:
+def CreateFileName(round_num: int, race_name: str, session: str, year: int) -> str:
     """Creates a file name from race name & session"""
-    safeName = raceName.replace(" ", "_").replace("'", "").lower()
-    return f"f1_{year}_{safeName}_{session.lower()}_reddit.csv"
+    safeName = race_name.replace(" ", "_").replace("'", "").lower()
+    return f"f1_{year}_round_{round_num}_{safeName}_{session.lower()}_reddit.csv"
 
 def GetSessionDates(race_data: dict) -> dict:
     """
@@ -121,34 +121,15 @@ def GetSessionDates(race_data: dict) -> dict:
     print(f"DEBUG: Extracting session dates from race data")
     print(f"DEBUG: Top-level keys: {list(race_data.keys())}")
 
-    session_objects = ['FP1', 'FP2', 'FP3', 'Qualifying', 'Race', 'Sprint', 'SprintQualifying']
-    for session in session_objects:
-        if session in race_data:
-            session_data = race_data[session]
-            if isinstance(session_data, dict) and 'date' in session_data:
-                session_dates[session] = session_data['date']
-                print(f"DEBUG: Found {session} on {session_data['date']}")
-
-    if 'Sessions' in race_data:
-        sessions = race_data['Sessions']
-        if isinstance(sessions, list):
-            session_type = session.get('type', 'Unknown')
-            session_date = session.get('date')
-            if session_date:
-                session_dates[session_type] = session_date
-                print(f"Fount {session_type} on session_date")
-
-    if 'Sprint' in race_data:
-        sprint_data = race_data['Sprint']
-        if isinstance(sprint_data, dict) and 'date' in sprint_data:
-            session_dates['Sprint'] = sprint_data['date']
-            print(f"DEBUG: Found Sprint on {sprint_data['date']}")
-    
-    if 'SprintQualifying' in race_data:
-        sprint_qual_data = race_data['SprintQualifying']
-        if isinstance(sprint_qual_data, dict) and 'date' in sprint_qual_data:
-            session_dates['Sprint Qualifying'] = sprint_qual_data['date']
-            print(f"DEBUG: Found Sprint Qualifying on {sprint_qual_data['date']}")
+    sessions = ['DATE', 'FIRSTPRACTICE', 'SECONDPRACTICE', 'THIRDPRACTICE', 'SPRINTQUALIFYING', 'SPRINT', 'QUALIFYING'] #date == actual race on sunday
+    for key, val in race_data.items():
+        if key.upper() in sessions:
+            if isinstance(val, str): 
+                session_dates[key] = val
+                print(f"DEBUG: Found top-level {key} on {val}")
+            elif isinstance(val, dict) and 'date' in val: 
+                session_dates[key] = val['date']
+                print(f"DEBUG: Found top-level {key} on {val['date']}")
 
     print(f"DEBUG: Final session dates: {session_dates}")
     return session_dates
@@ -183,17 +164,21 @@ def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[
         
         commentData = []
         for comment in comments:
-            commentData.append({
-                "id": comment.id,
-                "link_id": comment.link_id,
-                "parent_id": comment.parent_id,
-                "body": comment.body,
-                "score": comment.score,
-                "created": datetime.fromtimestamp(comment.created_utc).isoformat(),
-                "author": getattr(comment.author, "name", None),
-                "session": session,
-                "type": "comment"  
-            })
+            try:
+                commentData.append({
+                    "id": getattr(comment, 'id', None),
+                    "link_id": getattr(comment, 'link_id', None),
+                    "parent_id": getattr(comment, 'parent_id', None),
+                    "body": getattr(comment, 'body', ''),
+                    "score": getattr(comment, 'score', 0),
+                    "created": datetime.fromtimestamp(getattr(comment, 'created_utc', 0)).isoformat(),
+                    "author": getattr(comment.author, "name", None) if comment.author else None,
+                    "session": session,
+                    "type": "comment"  
+                })
+            except Exception as e:
+                logging.warning(f"Error processing comment {getattr(comment, 'id', 'unknown')}: {e}")
+                continue  # Skip this comment and continue with others
         
         return {"posts": postData, "comments": commentData}
         
@@ -211,9 +196,8 @@ def main():
         user_agent=os.getenv("USER_AGENT")
     )
 
-    race_data = scraper.GetRaceInfo(2025, 6)
-    session_dates = GetSessionDates(race_data)
-
+    race_data = GetRaceInfo(2025, 6)
+    session_dates = GetSessionDates(race_data["Races"])
     """
     load_dotenv(find_dotenv())
     ValidateEnvVars()
