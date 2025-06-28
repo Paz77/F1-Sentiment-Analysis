@@ -88,18 +88,6 @@ def GetRaceInfo(year: Optional[int] = None, round: Optional[int] = None) -> Dict
         print(f"DEBUG: Full API response: {resp.text}")
         raise
 
-def IsSprintWeekend(race_data: dict) -> bool: #might not actually need this 
-    """
-    Determines if race weekend is a sprint weekend
-    """
-    if 'Sprint' in race_data or 'SprintQualifying' in race_data:
-        print("DEBUG: Found 'Sprint' / 'SprintQualifying' in race_data")
-        print("Sprint Weekend!")
-        return True
-
-    print("DEBUG: Normal Weekend!")
-    return False
-
 def ValidateEnvVars() -> None:
     """Validates the required env variables"""
     requiredVars = ["CLIENT_ID", "CLIENT_SECRET", "USER_AGENT"]
@@ -178,7 +166,7 @@ def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[
                 })
             except Exception as e:
                 logging.warning(f"Error processing comment {getattr(comment, 'id', 'unknown')}: {e}")
-                continue  # Skip this comment and continue with others
+                continue 
         
         return {"posts": postData, "comments": commentData}
         
@@ -186,19 +174,56 @@ def ProcessPost(post: Submission, session: str, comment_limit: int) -> Optional[
         logging.warning(f"Error processing post {post.id}: {e}")
         return None
 
-def main():
-    load_dotenv(find_dotenv())
-    ValidateEnvVars()
-
-    scraper = RedditScraper(
-        client_id=os.getenv("CLIENT_ID"),
-        client_secret=os.getenv("CLIENT_SECRET"),
-        user_agent=os.getenv("USER_AGENT")
-    )
-
-    race_data = GetRaceInfo(2025, 6)
-    session_dates = GetSessionDates(race_data["Races"])
+def GetSessionWindow(session_type: str, session_date: datetime) -> tuple:
     """
+    Returns <start, end> times for specific session
+    """
+    if session_type in ["FP1", "FP2", "FP3"]:
+        start = session_date - timedelta(days=2)
+        end = session_date + timedelta(days=1)
+    elif session_type in ["QUALIFYING", "SPRINT QUALIFYING"]:
+        start = session_date - timedelta(days=1)
+        end = session_date + timedelta(days=1)
+    elif session_type == "SPRINT":
+        start = session_date - timedelta(days=1)
+        end = session_date + timedelta(days=1)
+    elif session_type == "RACE":
+        start = session_date - timedelta(days=1)
+        end = session_date + timedelta(days=2)
+    else:
+        start = session_date - timedelta(days=1)
+        end = session_date + timedelta(days=1)
+    
+    return start.replace(tzinfo=timezone.utc), end.replace(tzinfo=timezone.utc)
+
+def ValidateSessionExists(session_type: str, session_dates: dict) -> bool:
+    """
+    Validates if the requested session exists for this race weekend.
+    
+    Args:
+        session_type: The session type (FP1, FP2, etc.)
+        session_dates: Dictionary of available session dates from API
+        
+    Returns:
+        True if session exists, False otherwise
+    """
+    session_mapping = {
+        "FP1": "FirstPractice",
+        "FP2": "SecondPractice", 
+        "FP3": "ThirdPractice",
+        "QUALIFYING": "Qualifying",
+        "SPRINT": "Sprint",
+        "SPRINT QUALIFYING": "SprintQualifying",
+        "RACE": "date"  
+    }
+    
+    if session_type not in session_mapping:
+        return False
+        
+    session_key = session_mapping[session_type]
+    return session_key in session_dates
+
+def main():
     load_dotenv(find_dotenv())
     ValidateEnvVars()
 
@@ -211,7 +236,7 @@ def main():
     parser.add_argument("--subreddit", default="formula1", help="Subreddit to search")
     parser.add_argument("--post_limit", type=int, default=50, help="Maximum number of posts to fetch")
     parser.add_argument("--comment_limit", type=int, default=10, help="Maximum number of comments per post")
-    parser.add_argument("--session", type=str, default="Race", help="Session type (FP1, FP2, FP3, Qualifying, Race)")
+    parser.add_argument("--session", type=str, default="Race", help="Session type (FP1, FP2, FP3, SprintQualifying, Sprint, Qualifying, Race)")
     parser.add_argument("--year", type=int, default=None, help="Year of the race")
     parser.add_argument("--round", type=int, default=None, help="Round number of the race")
     args = parser.parse_args()
@@ -225,20 +250,50 @@ def main():
             user_agent=os.getenv("USER_AGENT")
         )
                 
-        raceInfo = scraper.GetRaceInfo(args.year, args.round)
+        race_info = GetRaceInfo(args.year, args.round)
+        race_data = race_info["Races"]  
+        
+        session_dates = GetSessionDates(race_data)        
         sub = scraper.reddit.subreddit(args.subreddit)
-        scraper.IsSprintWeekend(raceInfo)
 
         session_upper = args.session.upper()
         if session_upper not in SESSION_CONFIG:
             raise ValueError(f"Invalid session type: {args.session}. Valid options are: {list(SESSION_CONFIG.keys())}")
         
+        if not ValidateSessionExists(session_upper, session_dates):
+            available_sessions = [k for k in session_dates.keys() if k != 'date']
+            raise ValueError(
+                f"Session '{args.session}' does not exist for this race weekend. "
+                f"Available sessions: {available_sessions}"
+            )
+        
         keywords = SESSION_CONFIG[session_upper]['keywords']
-        offset_days = SESSION_CONFIG[session_upper]['offset_days']
+        
+        race_date = datetime.strptime(race_data["date"], "%Y-%m-%d")
+        
+        session_date_key = None
+        if args.session.upper() == "FP1":
+            session_date_key = "FirstPractice"
+        elif args.session.upper() == "FP2":
+            session_date_key = "SecondPractice"
+        elif args.session.upper() == "FP3":
+            session_date_key = "ThirdPractice"
+        elif args.session.upper() == "QUALIFYING":
+            session_date_key = "Qualifying"
+        elif args.session.upper() == "SPRINT":
+            session_date_key = "Sprint"
+        elif args.session.upper() == "SPRINT QUALIFYING":
+            session_date_key = "SprintQualifying"
+        elif args.session.upper() == "RACE":
+            session_date_key = "date"
 
-        race_date = datetime.strptime(raceInfo["date"], "%Y-%m-%d")
-        session_start = (race_date + timedelta(days=offset_days)).replace(tzinfo=timezone.utc)
-        session_end = session_start + timedelta(days=1)
+        if session_date_key and session_date_key in session_dates:
+            session_date = datetime.strptime(session_dates[session_date_key], "%Y-%m-%d")
+            session_start, session_end = GetSessionWindow(args.session.upper(), session_date)
+        else:
+            print(f"WARNING: Session date not found for {args.session}, using race date as fallback")
+            session_start, session_end = GetSessionWindow(args.session.upper(), race_date)
+        
         start_epoch = int(session_start.timestamp())
         end_epoch = int(session_end.timestamp())
         
@@ -252,11 +307,11 @@ def main():
         posts_in_date_range = 0
         posts_matched = 0
         
-        race_name_clean = raceInfo["race_name"].replace("Grand Prix", "").strip()
+        race_name_clean = race_data["raceName"].replace("Grand Prix", "").strip()
         search_queries = [
-            f'"{raceInfo["race_name"]}"',
+            f'"{race_data["raceName"]}"',
             f'"{race_name_clean}"',
-            f'"{raceInfo["race_name"]}" {args.session.lower()}',
+            f'"{race_data["raceName"]}" {args.session.lower()}',
             f'{race_name_clean} {args.session.lower()}'
         ]
         
@@ -296,11 +351,11 @@ def main():
         if posts_matched < 5:
             print(f"DEBUG: Only found {posts_matched} posts via search, trying recent posts...")
             try:
-                for post in sub.new(limit=1000):  # Check more recent posts
+                for post in sub.new(limit=1000): 
                     posts_checked += 1
                     post_time = post.created_utc
                     
-                    if post_time < start_epoch - 86400 * 7:  # Stop if more than a week before
+                    if post_time < start_epoch - 86400 * 7: 
                         break
                         
                     if start_epoch <= post_time <= end_epoch:
@@ -311,7 +366,7 @@ def main():
                         race_name_parts = race_name_clean.lower().split()
                         if (any(kw in title_lower for kw in keywords) and 
                             (any(part in title_lower for part in race_name_parts) or 
-                             raceInfo["race_name"].lower() in title_lower)):
+                             race_data["raceName"].lower() in title_lower)):
                             
                             posts_matched += 1
                             print(f"DEBUG: Found matching post via new(): '{post.title[:60]}...'")
@@ -339,7 +394,12 @@ def main():
         else:
             df = pd.DataFrame(records)
         
-        filename = CreateFileName(raceInfo["race_name"], args.session, int(raceInfo["year"]))
+        filename = CreateFileName(
+            round_num=int(race_data["round"]),
+            race_name=race_data["raceName"],
+            session=args.session,
+            year=int(race_data["season"])
+        )
         df.to_csv(filename, index=False)
 
         logging.info(f"Successfully wrote {len(df)} records to {filename}")
@@ -349,7 +409,6 @@ def main():
         logging.error(f"Error in main: {e}")
         print(f"DEBUG: Exception details: {type(e).__name__}: {e}")
         raise
-    """
 
 if __name__ == "__main__":
     main()
