@@ -386,9 +386,9 @@ def main():
         print(f"  - Total records collected: {len(records)}")
 
         if not records:
-            print("WARNING: No records founds, skipping.")
-        else:
-            df = pd.DataFrame(records)
+            raise ValueError(f"No Reddit posts found for {args.session} session of {race_data['raceName']} ({race_data['season']} Round {race_data['round']})")
+        
+        df = pd.DataFrame(records)
         
         filename = CreateFileName(
             round_num=int(race_data["round"]),
