@@ -188,7 +188,8 @@ def main():
     parser.add_argument("--start_round", type=int, default=1, help="Starting round number (default: 1)")
     parser.add_argument("--end_round", type=int, default=None, help="Ending round number (default: all completed)")
 
-    parser.add_argument("--sessions", nargs="+", choices=["FP1", "FP2", "FP3", "Qualifying", "Race"], default=["FP1", "FP2", "FP3", "Qualifying", "Race"], help="Sessions to scrape (default: Race only)")
+    sessions = ["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"]
+    parser.add_argument("--sessions", nargs="+", choices=sessions, default=sessions, help="Sessions to scrape (default: Race only)")
 
     parser.add_argument("--script_path", default="back end/FetchPosts&Comments.py", help="Path to FetchPosts&Comments.py script")
     parser.add_argument("--subreddit", default="formula1", help="subreddit to scrape")
