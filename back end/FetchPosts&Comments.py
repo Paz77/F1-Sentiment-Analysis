@@ -386,11 +386,7 @@ def main():
         print(f"  - Total records collected: {len(records)}")
 
         if not records:
-            print("WARNING: No records found. Creating empty CSV file.")
-            df = pd.DataFrame(columns=[
-                "id", "session", "title", "selftext", "score", "created", 
-                "permalink", "author", "num_comments", "type"
-            ])
+            print("WARNING: No records founds, skipping.")
         else:
             df = pd.DataFrame(records)
         
