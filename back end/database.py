@@ -87,7 +87,139 @@ class F1Database:
                 ))
 
                 conn.commit()
-                
+
         except Exception as e:
             logging.error(f"Error inserting post {post_data.get('id', 'unknown')}: {e}")
     
+    def insert_comment(self, comment_data: Dict, post_id: str, race_info: Dict):
+        """
+        Inserts comment into db
+        Parameters:
+            comment_data: dict containing comment info (duh)
+            post_id: ID of parent post
+            race_info: dict containing race info
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    INSERT OR IGNORE INTO comments 
+                    (id, post_id, link_id, parent_id, body, score, created, author, 
+                     session, race_name, race_round, race_year)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    comment_data['id'],
+                    post_id,
+                    comment_data['link_id'],
+                    comment_data['parent_id'],
+                    comment_data['body'],
+                    comment_data['score'],
+                    comment_data['created'],
+                    comment_data['author'],
+                    comment_data['session'],
+                    race_info['raceName'],
+                    race_info['round'],
+                    race_info['season']
+                ))
+
+                conn.commit()
+        
+        except Exception as e:
+            logging.error(f"Error inserting comment {comment_data.get('id', 'unknown')} : {e}")
+    
+    def insert_race(self, race_info: Dict):
+        """
+        Inserts race info into db
+        Parameters:
+            race_info: dict containing race info (duh)
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    INSERT OR IGNORE INTO races 
+                    (race_name, race_round, race_year, race_date, circuit_name, country)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    race_info['raceName'],
+                    race_info['round'],
+                    race_info['season'],
+                    race_info['date'],
+                    race_info.get('Circuit', {}).get('circuitName', ''),
+                    race_info.get('Circuit', {}).get('Location', {}).get('country', '')
+                ))
+
+                conn.commit()
+
+        except Exception as e:
+            logging.error(f"Error inserting race {race_info.get('raceName', 'unknown')}: {e}")
+    
+    def get_posts_by_session(self, session: str, race_name: str, race_year: int) -> List[Dict]:
+        """think imma stop doing this bc the parameters r self explanatory"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT id, session, title, selftext, score, created, permalink, 
+                           author, num_comments, race_name, race_round, race_year
+                    FROM posts 
+                    WHERE session = ? AND race_name = ? AND race_year = ?
+                    ORDER BY created DESC
+                ''', (session, race_name, race_year))
+            
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        except Exception as e:
+            logging.error(f"Error fetching posts: {e}")
+            return []
+
+    def get_comments_by_post(self, post_id: str) -> List[Dict]:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT id, post_id, link_id, parent_id, body, score, created, 
+                           author, session, race_name, race_round, race_year
+                    FROM comments 
+                    WHERE post_id = ?
+                    ORDER BY created ASC
+                ''', (post_id,))
+                
+                columns = [description[0] for description in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+        except Exception as e:
+            logging.error(f"Error fetching comments: {e}")
+            return []
+    
+    def export_to_csv(self, session: str, race_name: str, race_year: int, filename: str):
+        try:
+            posts = self.get_posts_by_session(session, race_name, race_year)
+            all_records = []
+            
+            for post in posts:
+                post_record = post.copy()
+                post_record['type'] = 'post'
+                all_records.append(post_record)
+                
+                # Add comment records
+                comments = self.get_comments_by_post(post['id'])
+                for comment in comments:
+                    comment_record = comment.copy()
+                    comment_record['type'] = 'comment'
+                    all_records.append(comment_record)
+            
+            if all_records:
+                df = pd.DataFrame(all_records)
+                df.to_csv(filename, index=False)
+                logging.info(f"Exported {len(all_records)} records to {filename}")
+            else:
+                logging.warning(f"No records found for export to {filename}")
+                
+        except Exception as e:
+            logging.error(f"Error exporting to CSV: {e}")
