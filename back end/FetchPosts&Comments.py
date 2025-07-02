@@ -2,14 +2,13 @@ import os
 import praw
 import logging
 import argparse
-from prawcore import session
 import requests
 import pandas as pd
+from database import F1Database
 from datetime import date, timezone, timedelta, datetime
 from dotenv import load_dotenv, find_dotenv
 from typing import List, Dict, Optional
 from praw.models import Submission
-from sqlalchemy import String
 
 SESSION_CONFIG = {
     "FP1": {
@@ -239,11 +238,14 @@ def main():
     parser.add_argument("--session", type=str, default="Race", help="Session type (FP1, FP2, FP3, SprintQualifying, Sprint, Qualifying, Race)")
     parser.add_argument("--year", type=int, default=None, help="Year of the race")
     parser.add_argument("--round", type=int, default=None, help="Round number of the race")
+    parser.add_argument("--exprort_csv", action="store_false", help="export results to csv")
     args = parser.parse_args()
 
     try:
         print(f"DEBUG: Starting scraper with args: {args}")
         
+        db = F1Database()
+
         scraper = RedditScraper(
             client_id=os.getenv("CLIENT_ID"),
             client_secret=os.getenv("CLIENT_SECRET"),
@@ -252,6 +254,7 @@ def main():
                 
         race_info = GetRaceInfo(args.year, args.round)
         race_data = race_info["Races"]  
+        db.insert_race(race_data)
         
         session_dates = GetSessionDates(race_data)        
         sub = scraper.reddit.subreddit(args.subreddit)
@@ -302,10 +305,11 @@ def main():
         print(f"DEBUG: Epoch range: {start_epoch} to {end_epoch}")
         print(f"DEBUG: Keywords: {keywords}")
 
-        records = []
         posts_checked = 0
         posts_in_date_range = 0
         posts_matched = 0
+        posts_inserted = 0
+        comments_inserted = 0
         
         race_name_clean = race_data["raceName"].replace("Grand Prix", "").strip()
         search_queries = [
@@ -336,9 +340,14 @@ def main():
                             
                             rec = ProcessPost(post, args.session, args.comment_limit)
                             if rec:
-                                records.append(rec["posts"])
-                                records.extend(rec["comments"])
-                                print(f"DEBUG: Added {1 + len(rec['comments'])} records from post {posts_checked}")
+                                if db.insert_post(rec["posts"], race_data):
+                                    posts_inserted += 1
+                                
+                                for comment in rec["comments"]:
+                                    if db.insert_comment(comment, rec["posts"]["id"], race_data):
+                                        comments_inserted += 1
+                                
+                                print(f"DEBUG: Inserted post and {len(rec['comments'])} comments from post {posts_checked}")
                         else:
                             print(f"DEBUG: Post {posts_checked} doesn't match keywords: {title_lower}")
                     else:
@@ -362,7 +371,6 @@ def main():
                         posts_in_date_range += 1
                         title_lower = post.title.lower()
                         
-                        # More flexible matching for race names
                         race_name_parts = race_name_clean.lower().split()
                         if (any(kw in title_lower for kw in keywords) and 
                             (any(part in title_lower for part in race_name_parts) or 
@@ -373,9 +381,19 @@ def main():
                             
                             rec = ProcessPost(post, args.session, args.comment_limit)
                             if rec:
-                                records.append(rec["posts"])
-                                records.extend(rec["comments"])
+                                if db.insert_post(rec["posts"], race_data):
+                                    posts_inserted += 1
                                 
+                                for comment in rec["comments"]:
+                                    if db.insert_comment(comment, rec["posts"]["id"], race_data):
+                                        comments_inserted += 1
+                                
+                                print(f"DEBUG: Inserted post and {len(rec['comments'])} comments from post {posts_checked}")
+                        else:
+                            print(f"DEBUG: Post {posts_checked} doesn't match keywords: {title_lower}")
+                    else:
+                        print(f"DEBUG: Post {posts_checked} outside date range")
+                        
             except Exception as e:
                 print(f"DEBUG: Error browsing new posts: {e}")
 
@@ -383,23 +401,23 @@ def main():
         print(f"  - Total posts checked: {posts_checked}")
         print(f"  - Posts in date range: {posts_in_date_range}")
         print(f"  - Posts matched keywords: {posts_matched}")
-        print(f"  - Total records collected: {len(records)}")
+        print(f"  - Posts inserted: {posts_inserted}")
+        print(f"  - Comments inserted: {comments_inserted}")
 
-        if not records:
+        if not posts_inserted:
             raise ValueError(f"No Reddit posts found for {args.session} session of {race_data['raceName']} ({race_data['season']} Round {race_data['round']})")
         
-        df = pd.DataFrame(records)
-        
-        filename = CreateFileName(
-            round_num=int(race_data["round"]),
-            race_name=race_data["raceName"],
-            session=args.session,
-            year=int(race_data["season"])
-        )
-        df.to_csv(filename, index=False)
-
-        logging.info(f"Successfully wrote {len(df)} records to {filename}")
-        print(f"DEBUG: File {filename} created with {len(df)} records")
+        if args.export_csv:
+            filename = CreateFileName(
+                round_num=int(race_data["round"]),
+                race_name=race_data["raceName"],
+                session=args.session,
+                year=int(race_data["season"])
+            )
+            db.export_to_csv(args.session, race_data["raceName"], race_data["season"], filename)
+            logging.info(f"Exported data to {filename}")
+        else:
+            logging.info(f"Successfully inserted {posts_inserted} posts and {comments_inserted} comments into database")
         
     except Exception as e:
         logging.error(f"Error in main: {e}")
