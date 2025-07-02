@@ -47,6 +47,23 @@ class F1Database:
                     )
                 ''')
 
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_posts_session_round_year 
+                    ON posts(session, race_round, race_year)
+                ''')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_posts_round_year 
+                    ON posts(race_round, race_year)
+                ''')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_posts_created 
+                    ON posts(created)
+                ''')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_races_round_year 
+                    ON races(race_round, race_year)
+                ''')
+
                 conn.commit()
                 logging.info(f"Database initialzied at {self.db_path}")
             
@@ -197,9 +214,12 @@ class F1Database:
             logging.error(f"Error fetching comments: {e}")
             return []
     
-    def export_to_csv(self, session: str, race_name: str, race_year: int, filename: str):
+    def export_to_csv(self, session: str, race_round: int, race_year: int, filename: str):
+        """
+        Export posts and comments for a specific session to CSV.
+        """
         try:
-            posts = self.get_posts_by_session(session, race_name, race_year)
+            posts = self.get_comments_by_round(session, race_round, race_year)
             all_records = []
             
             for post in posts:
@@ -223,3 +243,77 @@ class F1Database:
                 
         except Exception as e:
             logging.error(f"Error exporting to CSV: {e}")
+
+    def get_comments_by_round(self, session: str, race_round: int, race_year: int) -> List[Dict]:
+        """
+        Get all posts for a specific session, round, and year using round number.
+        Returns list of post dictionaries
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT id, session, title, selftext, score, created, permalink, 
+                           author, num_comments, race_name, race_round, race_year
+                    FROM posts 
+                    WHERE session = ? AND race_round = ? AND race_year = ?
+                    ORDER BY created DESC
+                ''', (session, race_round, race_year))
+            
+                columns = [description[0] for description in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        except Exception as e:
+            logging.error(f"Error fetching posts by round: {e}")
+            return []
+
+    def get_all_sessions_by_round(self, race_round: int, race_year: int) -> List[Dict]:
+        """
+        Get all posts for all sessions of a specific race weekend.
+        Returns list of post dictionaries for all sessions
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT id, session, title, selftext, score, created, permalink, 
+                           author, num_comments, race_name, race_round, race_year
+                    FROM posts 
+                    WHERE race_round = ? AND race_year = ?
+                    ORDER BY session, created DESC
+                ''', (race_round, race_year))
+            
+                columns = [description[0] for description in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        except Exception as e:
+            logging.error(f"Error fetching all sessions by round: {e}")
+            return []
+
+    def get_race_info_by_round(self, race_round: int, race_year: int) -> Optional[Dict]:
+        """
+        Get race information for a specific round and year.
+
+        Returns race information dictionary or None if not found
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT race_name, race_round, race_year, race_date, circuit_name, country
+                    FROM races 
+                    WHERE race_round = ? AND race_year = ?
+                ''', (race_round, race_year))
+            
+                row = cursor.fetchone()
+                if row:
+                    columns = [description[0] for description in cursor.description]
+                    return dict(zip(columns, row))
+                return None
+        
+        except Exception as e:
+            logging.error(f"Error fetching race info by round: {e}")
+            return None
