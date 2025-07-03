@@ -46,6 +46,23 @@ class F1Database:
                         UNIQUE(race_name, race_round, race_year)
                     )
                 ''')
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS comments (
+                    id TEXT PRIMARY KEY,
+                    post_id TEXT NOT NULL,
+                    link_id TEXT,
+                    parent_id TEXT,
+                    body TEXT,
+                    score INTEGER,
+                    created TEXT NOT NULL,
+                    author TEXT,
+                    session TEXT NOT NULL,
+                    race_name TEXT,
+                    race_round INTEGER,
+                    race_year INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (post_id) REFERENCES posts (id)
+                )''')
 
                 cursor.execute('''
                     CREATE INDEX IF NOT EXISTS idx_posts_session_round_year 
@@ -63,6 +80,11 @@ class F1Database:
                     CREATE INDEX IF NOT EXISTS idx_races_round_year 
                     ON races(race_round, race_year)
                 ''')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_comments_post_id
+                    ON comments(post_id)
+                '''
+                )
 
                 conn.commit()
                 logging.info(f"Database initialzied at {self.db_path}")
