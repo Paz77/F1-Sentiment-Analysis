@@ -238,7 +238,7 @@ def main():
     parser.add_argument("--session", type=str, default="Race", help="Session type (FP1, FP2, FP3, SprintQualifying, Sprint, Qualifying, Race)")
     parser.add_argument("--year", type=int, default=None, help="Year of the race")
     parser.add_argument("--round", type=int, default=None, help="Round number of the race")
-    parser.add_argument("--exprort_csv", action="store_false", help="export results to csv")
+    parser.add_argument("--export_csv", action="store_true", help="export results to csv")
     args = parser.parse_args()
 
     try:
@@ -340,14 +340,23 @@ def main():
                             
                             rec = ProcessPost(post, args.session, args.comment_limit)
                             if rec:
-                                if db.insert_post(rec["posts"], race_data):
+                                print(f"DEBUG: Attempting to insert post {rec['posts']['id']}")
+                                
+                                post_success = db.insert_post(rec["posts"], race_data)
+                                if post_success:
                                     posts_inserted += 1
+                                    print(f"DEBUG: Successfully inserted post {rec['posts']['id']}")
+                                else:
+                                    print(f"DEBUG: Failed to insert post {rec['posts']['id']}")
                                 
+                                comment_success_count = 0
                                 for comment in rec["comments"]:
-                                    if db.insert_comment(comment, rec["posts"]["id"], race_data):
+                                    comment_success = db.insert_comment(comment, rec["posts"]["id"], race_data)
+                                    if comment_success:
                                         comments_inserted += 1
+                                        comment_success_count += 1
                                 
-                                print(f"DEBUG: Inserted post and {len(rec['comments'])} comments from post {posts_checked}")
+                                print(f"DEBUG: Inserted {comment_success_count}/{len(rec['comments'])} comments for post {rec['posts']['id']}")
                         else:
                             print(f"DEBUG: Post {posts_checked} doesn't match keywords: {title_lower}")
                     else:
@@ -381,14 +390,23 @@ def main():
                             
                             rec = ProcessPost(post, args.session, args.comment_limit)
                             if rec:
-                                if db.insert_post(rec["posts"], race_data):
+                                print(f"DEBUG: Attempting to insert post {rec['posts']['id']}")
+                                
+                                post_success = db.insert_post(rec["posts"], race_data)
+                                if post_success:
                                     posts_inserted += 1
+                                    print(f"DEBUG: Successfully inserted post {rec['posts']['id']}")
+                                else:
+                                    print(f"DEBUG: Failed to insert post {rec['posts']['id']}")
                                 
+                                comment_success_count = 0
                                 for comment in rec["comments"]:
-                                    if db.insert_comment(comment, rec["posts"]["id"], race_data):
+                                    comment_success = db.insert_comment(comment, rec["posts"]["id"], race_data)
+                                    if comment_success:
                                         comments_inserted += 1
+                                        comment_success_count += 1
                                 
-                                print(f"DEBUG: Inserted post and {len(rec['comments'])} comments from post {posts_checked}")
+                                print(f"DEBUG: Inserted {comment_success_count}/{len(rec['comments'])} comments for post {rec['posts']['id']}")
                         else:
                             print(f"DEBUG: Post {posts_checked} doesn't match keywords: {title_lower}")
                     else:
@@ -414,7 +432,7 @@ def main():
                 session=args.session,
                 year=int(race_data["season"])
             )
-            db.export_to_csv(args.session, race_data["raceName"], race_data["season"], filename)
+            db.export_to_csv(args.session, race_data["round"], race_data["season"], filename)
             logging.info(f"Exported data to {filename}")
         else:
             logging.info(f"Successfully inserted {posts_inserted} posts and {comments_inserted} comments into database")
