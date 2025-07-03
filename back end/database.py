@@ -93,7 +93,7 @@ class F1Database:
             logging.error(f"Error initializing database: {e}")
             raise
 
-    def insert_post(self, post_data: Dict, race_info: Dict):
+    def insert_post(self, post_data: Dict, race_info: Dict) -> bool:
         """
         Inserts a post into the db
         Parameters:
@@ -126,11 +126,13 @@ class F1Database:
                 ))
 
                 conn.commit()
+                return True
 
         except Exception as e:
             logging.error(f"Error inserting post {post_data.get('id', 'unknown')}: {e}")
+            return False
     
-    def insert_comment(self, comment_data: Dict, post_id: str, race_info: Dict):
+    def insert_comment(self, comment_data: Dict, post_id: str, race_info: Dict) -> bool:
         """
         Inserts comment into db
         Parameters:
@@ -163,9 +165,11 @@ class F1Database:
                 ))
 
                 conn.commit()
+                return True
         
         except Exception as e:
             logging.error(f"Error inserting comment {comment_data.get('id', 'unknown')} : {e}")
+            return False
     
     def insert_race(self, race_info: Dict):
         """
