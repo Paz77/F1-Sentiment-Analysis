@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 from typing import List, Dict, Optional
+import os
 
 class F1Database:
     def __init__(self, db_path: str = "f1_sentiment.db"):
@@ -343,3 +344,18 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error fetching race info by round: {e}")
             return None
+
+    def export_everything(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                print("Tables found:", tables)
+
+                for table_name in tables:
+                    table_name = table_name[0]
+                    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+                    df.to_csv(f"{table_name}.csv", index=False)
+                    print(f"Exported {table_name} to {table_name}.csv")
+                
+        except Exception as e:
+            print(f"Error exporting database: {e}")
