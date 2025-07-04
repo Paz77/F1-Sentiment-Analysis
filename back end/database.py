@@ -200,7 +200,7 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error inserting race {race_info.get('raceName', 'unknown')}: {e}")
     
-    def get_posts_by_session(self, session: str, race_name: str, race_year: int) -> List[Dict]:
+    def get_posts_by_session(self, session: str, round_num: int, race_year: int) -> List[Dict]:
         """think imma stop doing this bc the parameters r self explanatory"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -210,15 +210,15 @@ class F1Database:
                     SELECT id, session, title, selftext, score, created, permalink, 
                            author, num_comments, race_name, race_round, race_year
                     FROM posts 
-                    WHERE session = ? AND race_name = ? AND race_year = ?
+                    WHERE session = ? AND round_num = ? AND race_year = ?
                     ORDER BY created DESC
-                ''', (session, race_name, race_year))
+                ''', (session, round_num, race_year))
             
             columns = [description[0] for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
         
         except Exception as e:
-            logging.error(f"Error fetching posts: {e}")
+            logging.error(f"Error fetching posts by session: {e}")
             return []
 
     def get_comments_by_post(self, post_id: str) -> List[Dict]:
