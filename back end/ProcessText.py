@@ -1,63 +1,137 @@
-import pandas as pd
-import argparse
-import requests
 import re
 import nltk
+import argparse
+import requests
+import logging
+import pandas as pd
+from database import F1Database
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.sentiment import SentimentIntensityAnalyzer
+from datetime import datetime
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 def clean_text(text):
-    text = text.lower()
-    text = re.sub(r"http\S+","", text)                
-    text = re.sub(r"\[.*?\]\(.*?\)","", text)         
-    text = re.sub(r"[^a-z0-9\s]"," ", text)          
-    text = re.sub(r"\s+"," ", text).strip()         
-    return text
+    """Clean text with error handling"""
+    try:
+        if pd.isna(text) or text == "":
+            return ""
+        
+        text = str(text).lower()
+        text = re.sub(r"http\S+", "", text)
+        text = re.sub(r"\[.*?\]\(.*?\)", "", text)
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    except Exception as e:
+        logging.error(f"Error cleaning text: {e}")
+        return ""
 
 def tokenize_remove_stops(text):
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+    
+    stops = set(stopwords.words('english'))
     tokens = word_tokenize(text)
+    
     return [t for t in tokens if t not in stops and len(t)>1]
 
-nltk.download("punkt")
-nltk.download("stopwords")
-nltk.download("punkt_tab") 
-nltk.download("vader_lexicon") 
-stops = set(stopwords.words("english"))
+def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""):
+    """ proccesses sentiment directly from db"""
+    db = F1Database()
 
-resp = requests.get("https://api.jolpi.ca/ergast/f1/current/next.json")
-data = resp.json()["MRData"]["RaceTable"]["Races"][0]
-race_name = data["raceName"] 
-default_csv = f"{race_name}.csv"
+    if session:
+        posts = db.get_posts_by_session(session, race_round, race_year)
+        comments = db.get_posts_by_session(session, race_round, race_year)
+    else:
+        all_data = db.get_all_sessions_by_round(race_round, race_year)
+        posts = [item for item in all_data if item.get('type') == 'post']
+        comments = [item for item in all_data if item.get('type') == 'comment']
 
-parser = argparse.ArgumentParser(
-    description="Clean, tokenize & analyze an F1 Reddit CSV"
-)
-parser.add_argument(
-    "--input","-i",
-    default=default_csv,
-    help="Path to the CSV file (default: %(default)s)"
-)
-args = parser.parse_args()
+    combined_texts = []
+    for post in posts:
+        text = f"{post.get('title', '')} {post.get('selftext', '')}"
+        combined_texts.append({
+            'id': post['id'],
+            'text': text,
+            'created': post['created'],
+            'type': 'post',
+            'session': post['session']
+        })
 
-df = pd.read_csv(args.input)
-df["cleaned"] = df["selftext"].fillna("") + " " + df["body"].fillna("")
-df["cleaned"] = df["cleaned"].map(clean_text)
-df["tokens"] = df["cleaned"].map(tokenize_remove_stops)
+    for comment in comments:
+        combined_texts.append({
+            'id': comment['id'],
+            'text': comment.get('body', ''),
+            'created': comment['created'],
+            'type': 'comment',
+            'session': comment['session']
+        })
 
-stemmer = PorterStemmer()
-df["stems"] = df["tokens"].map(lambda toks: [stemmer.stem(t) for t in toks])
-docs = df["tokens"].map(" ".join)
+    df = pd.DataFrame(combined_texts)
+    df['cleaned'] = df['text'].map(clean_text)
+    df['tokens'] = df['cleaned'].map(tokenize_remove_stops)
 
-tfidf = TfidfVectorizer(max_features=5000)  
-X = tfidf.fit_transform(docs)  
+    sia = SentimentIntensityAnalyzer()
+    df['vader_score'] = df['cleaned'].map(lambda txt: sia.polarity_scores(txt)['compound'])
 
-sia = SentimentIntensityAnalyzer()
-df["vader_score"] = df["cleaned"].map(lambda txt: sia.polarity_scores(txt)["compound"])
+    db.save_sentiment_scores(df)
+    return df
 
-outColumns = ["id", "created", "vader_score"]
-outputSentimentFile = f"{race_name} Sentiment.csv"
-df.to_csv(outputSentimentFile, columns=outColumns, index=False)
-print(f"Saved sentiment scores to {outputSentimentFile}")
+def process_in_batches(df, batch_size=1000):
+    """processes large datasets in batches"""
+    results = []
+    
+    for i in range(0, len(df), batch_size):
+        batch = df.iloc[i:i+batch_size]
+        logging.info(f"Processing batch {i//batch_size + 1}/{(len(df)-1)//batch_size + 1}")
+        
+        batch['cleaned'] = batch['text'].map(clean_text)
+        batch['tokens'] = batch['cleaned'].map(tokenize_remove_stops)
+        
+        sia = SentimentIntensityAnalyzer()
+        batch['vader_score'] = batch['cleaned'].map(
+            lambda txt: sia.polarity_scores(txt)['compound']
+        )
+        
+        results.append(batch)
+    
+    return pd.concat(results, ignore_index=True)
+
+def main():
+    parser = argparse.ArgumentParser(description="Process sentiment analysis for F1 Reddit data")
+
+    parser.add_argument("--year", type=int, default=datetime.now().year, help="F1 season year (default: current year)")
+    parser.add_argument("--round", type=int, required=True, help="F1 race round number")
+    parser.add_argument("--session", choices=["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"], help="Specific session to analyze (optional)")
+    parser.add_argument("--batch_size", type=int, default=1000, help="Batch size for processing (default: 1000)")
+    args = parser.parse_args()
+
+    db = F1Database()
+    try:
+        df = process_sentiment_from_db(
+            race_round=args.round,
+            race_year=args.year,
+            session=args.session
+        )
+        
+        race_info = db.get_race_info_by_round(args.race_round, args.race_year)
+        if race_info:
+            output_file = f"{race_info['race_name']}_sentiment_analysis.csv"
+            df.to_csv(output_file, index=False)
+            logging.info(f"Results saved to {output_file}")
+        
+    except Exception as e:
+        logging.error(f"Error in main processing: {e}")
+        raise
+
+if __name__ == "__main__":
+    main()
