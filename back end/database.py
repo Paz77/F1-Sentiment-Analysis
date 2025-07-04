@@ -359,3 +359,76 @@ class F1Database:
                 
         except Exception as e:
             print(f"Error exporting database: {e}")
+
+    def get_session_data(self, session: str, race_round: int, race_year: int) -> Dict[str, List[Dict]]:
+        """
+        Get both posts and comments for a specific session.
+        
+        Returns:
+            Dictionary with 'posts' and 'comments' keys
+        """
+        try:
+            posts = self.get_posts_by_session(session, race_round, race_year)
+            comments = self.get_comments_by_round(session, race_round, race_year)
+            
+            return {
+                'posts': posts,
+                'comments': comments
+            }
+        
+        except Exception as e:
+            logging.error(f"Error fetching session data: {e}")
+            return {'posts': [], 'comments': []}
+
+    def add_sentiment_table(self):
+        """Add sentiment analysis table"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS sentiment_scores (
+                        id TEXT PRIMARY KEY,
+                        vader_score REAL,
+                        positive_score REAL,
+                        negative_score REAL,
+                        neutral_score REAL,
+                        cleaned_text TEXT,
+                        tokens TEXT,
+                        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (id) REFERENCES posts(id) ON DELETE CASCADE,
+                        FOREIGN KEY (id) REFERENCES comments(id) ON DELETE CASCADE
+                    )
+                ''')
+                
+                conn.commit()
+                logging.info("Sentiment scores table created")
+                
+        except Exception as e:
+            logging.error(f"Error creating sentiment table: {e}")
+            raise
+
+    def save_sentiment_scores(self, sentiment_data: pd.DataFrame):
+        """Save sentiment scores to database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                for _, row in sentiment_data.iterrows():
+                    cursor = conn.cursor()
+                    
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO sentiment_scores 
+                        (id, vader_score, cleaned_text, tokens)
+                        VALUES (?, ?, ?, ?)
+                    ''', (
+                        row['id'],
+                        row['vader_score'],
+                        row['cleaned'],
+                        ' '.join(row['tokens']) if isinstance(row['tokens'], list) and len(row['tokens']) > 0 else ''
+                    ))
+                
+                conn.commit()
+                logging.info(f"Saved {len(sentiment_data)} sentiment scores")
+                
+        except Exception as e:
+            logging.error(f"Error saving sentiment scores: {e}")
+            raise
