@@ -47,10 +47,13 @@ def tokenize_remove_stops(text):
 def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""):
     """ proccesses sentiment directly from db"""
     db = F1Database()
+    
+    # Create sentiment table if it doesn't exist
+    db.add_sentiment_table()
 
     if session:
         posts = db.get_posts_by_session(session, race_round, race_year)
-        comments = db.get_posts_by_session(session, race_round, race_year)
+        comments = db.get_comments_by_round(session, race_round, race_year)
     else:
         all_data = db.get_all_sessions_by_round(race_round, race_year)
         posts = [item for item in all_data if item.get('type') == 'post']
@@ -77,6 +80,14 @@ def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""
         })
 
     df = pd.DataFrame(combined_texts)
+    if df.empty:
+        logging.warning(f"No data found for round {race_round}, year {race_year}, session {session}")
+        return df
+
+    if 'text' not in df.columns:
+        logging.error("DataFrame missing 'text' column")
+        return df
+
     df['cleaned'] = df['text'].map(clean_text)
     df['tokens'] = df['cleaned'].map(tokenize_remove_stops)
 
@@ -123,7 +134,7 @@ def main():
             session=args.session
         )
         
-        race_info = db.get_race_info_by_round(args.race_round, args.race_year)
+        race_info = db.get_race_info_by_round(args.round, args.year)
         if race_info:
             output_file = f"{race_info['race_name']}_sentiment_analysis.csv"
             df.to_csv(output_file, index=False)
