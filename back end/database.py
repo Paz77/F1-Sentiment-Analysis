@@ -210,7 +210,7 @@ class F1Database:
                     SELECT id, session, title, selftext, score, created, permalink, 
                            author, num_comments, race_name, race_round, race_year
                     FROM posts 
-                    WHERE session = ? AND round_num = ? AND race_year = ?
+                    WHERE session = ? AND race_round = ? AND race_year = ?
                     ORDER BY created DESC
                 ''', (session, round_num, race_year))
             
@@ -273,37 +273,38 @@ class F1Database:
 
     def get_comments_by_round(self, session: str, race_round: int, race_year: int) -> List[Dict]:
         """
-        Get all posts for a specific session, round, and year using round number.
-        Returns list of post dictionaries
+        Get all comments for a specific session, round, and year using round number.
+        Returns list of comment dictionaries
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
 
                 cursor.execute('''
-                    SELECT id, session, title, selftext, score, created, permalink, 
-                           author, num_comments, race_name, race_round, race_year
-                    FROM posts 
+                    SELECT id, post_id, link_id, parent_id, body, score, created, 
+                           author, session, race_name, race_round, race_year
+                    FROM comments 
                     WHERE session = ? AND race_round = ? AND race_year = ?
-                    ORDER BY created DESC
+                    ORDER BY created ASC
                 ''', (session, race_round, race_year))
             
                 columns = [description[0] for description in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
         
         except Exception as e:
-            logging.error(f"Error fetching posts by round: {e}")
+            logging.error(f"Error fetching comments by round: {e}")
             return []
 
     def get_all_sessions_by_round(self, race_round: int, race_year: int) -> List[Dict]:
         """
-        Get all posts for all sessions of a specific race weekend.
-        Returns list of post dictionaries for all sessions
+        Get all posts and comments for all sessions of a specific race weekend.
+        Returns list of dictionaries with 'type' field indicating 'post' or 'comment'
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-
+                
+                # Get posts
                 cursor.execute('''
                     SELECT id, session, title, selftext, score, created, permalink, 
                            author, num_comments, race_name, race_round, race_year
@@ -311,9 +312,30 @@ class F1Database:
                     WHERE race_round = ? AND race_year = ?
                     ORDER BY session, created DESC
                 ''', (race_round, race_year))
-            
-                columns = [description[0] for description in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                posts_columns = [description[0] for description in cursor.description]
+                posts = [dict(zip(posts_columns, row)) for row in cursor.fetchall()]
+                
+                # Get comments
+                cursor.execute('''
+                    SELECT id, post_id, link_id, parent_id, body, score, created, 
+                           author, session, race_name, race_round, race_year
+                    FROM comments 
+                    WHERE race_round = ? AND race_year = ?
+                    ORDER BY session, created ASC
+                ''', (race_round, race_year))
+                
+                comments_columns = [description[0] for description in cursor.description]
+                comments = [dict(zip(comments_columns, row)) for row in cursor.fetchall()]
+                
+                # Add type field to distinguish posts and comments
+                for post in posts:
+                    post['type'] = 'post'
+                for comment in comments:
+                    comment['type'] = 'comment'
+                
+                # Combine and return
+                return posts + comments
         
         except Exception as e:
             logging.error(f"Error fetching all sessions by round: {e}")
