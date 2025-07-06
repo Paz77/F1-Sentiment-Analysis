@@ -12,25 +12,34 @@ from praw.models import Submission
 
 SESSION_CONFIG = {
     "FP1": {
-        "keywords": ["fp1", "free practice 1", "practice 1"],
+        "keywords": ["fp1", "free practice 1", "practice 1", "fp1 discussion", "fp1 thread", "fp1 results", "fp1 live"],
     },
     "FP2": {
-        "keywords": ["fp2", "free practice 2", "practice 2"],
+        "keywords": ["fp2", "free practice 2", "practice 2", "fp2 discussion", "fp2 thread", "fp2 results", "fp2 live"],
     },
     "FP3": {
-        "keywords": ["fp3", "free practice 3", "practice 3"],
+        "keywords": ["fp3", "free practice 3", "practice 3", "fp3 discussion", "fp3 thread", "fp3 results", "fp3 live"],
     },
     "SPRINT QUALIFYING": {
-        "keywords": ["sprint qualifying", "sprint shootout", "sprint quali", "sprint q"],
+        "keywords": [
+            "sprint qualifying", "sprint shootout", "sprint quali", "sprint q",
+            "sprint qualifying discussion", "sprint qualifying thread", "sprint shootout discussion", 
+            "sprint shootout thread", "sq discussion", "sq thread", "sprint qualifying results",
+            "sprint shootout results", "sprint qualifying live", "sprint shootout live"
+        ],
     },
     "SPRINT": {
-        "keywords": ["sprint", "sprint race"],
+        "keywords": [
+            "sprint", "sprint race", "sprint discussion", "sprint thread", "sprint race discussion",
+            "sprint race thread", "sprint results", "sprint race results", "sprint live", "sprint race live",
+            "sprint session", "sprint race session", "sprint start", "sprint race start"
+        ],
     }, 
     "QUALIFYING": {
-        "keywords": ["quali", "qualifying", "q1", "q2", "q3"],
+        "keywords": ["quali", "qualifying", "q1", "q2", "q3", "qualifying discussion", "qualifying thread", "quali discussion", "quali thread", "qualifying results", "quali results", "qualifying live", "quali live"],
     },
     "RACE": {
-        "keywords": ["race", "grand prix", "gp", "race thread", "race discussion"],
+        "keywords": ["race", "grand prix", "gp", "race thread", "race discussion", "race results", "race live", "race start", "race finish", "race podium", "race highlights", "race recap", "race analysis", "race review"],
     }
 }
 class RedditScraper:
@@ -316,7 +325,10 @@ def main():
             f'"{race_data["raceName"]}"',
             f'"{race_name_clean}"',
             f'"{race_data["raceName"]}" {args.session.lower()}',
-            f'{race_name_clean} {args.session.lower()}'
+            f'{race_name_clean} {args.session.lower()}',
+            f'"{args.session.upper()}"', 
+            f'"{args.session.upper()} discussion"',  
+            f'"{args.session.upper()} thread"', 
         ]
         
         for query in search_queries:
