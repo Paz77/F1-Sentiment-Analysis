@@ -260,8 +260,8 @@ def main():
     parser.add_argument("--sessions", nargs="+", choices=all_sessions, default=None, help="Sessions to scrape (default: auto-detect based on weekend type)")
     parser.add_argument("--script_path", default="back end/FetchPosts&Comments.py", help="Path to FetchPosts&Comments.py script")
     parser.add_argument("--subreddit", default="formula1", help="subreddit to scrape")
-    parser.add_argument("--post_limit", type=int, default=50, help="Post limit per session")
-    parser.add_argument("--comment_limit", type=int, default=10, help="Comment limit per post")
+    parser.add_argument("--post_limit", type=int, default=200, help="Post limit per session")
+    parser.add_argument("--comment_limit", type=int, default=25, help="Comment limit per post")
     parser.add_argument("--config", type=str, default=None, help="JSON string of specific race configs (for specific mode)")
     
     args = parser.parse_args()
