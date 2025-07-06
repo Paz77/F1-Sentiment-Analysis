@@ -107,14 +107,11 @@ class F1BatchScraper:
         """
         Scrapes all races for given year
         """
-        if sessions is None:
-            sessions = self.sessions
-
         completed_races = self.get_completed_races(year)
         stats = {"total": 0, "successful": 0, "failed": 0}
 
         if not completed_races:
-            print(f"No comepleted races found for {year}")
+            print(f"No completed races found for {year}")
             return stats
         
         if end_round:
@@ -122,16 +119,23 @@ class F1BatchScraper:
         else:
             completed_races = [r for r in completed_races if r["round"] >= start_round]
         
-        print(f"Starting batch scrape for {len(completed_races)} races, {len(sessions)} sessions each")
-        print(f"Sessions: {', '.join(sessions)}")
+        print(f"Starting batch scrape for {len(completed_races)} races")
         print("=" * 60)
 
         for race in completed_races:
             race_round = race["round"]
             race_name = race["race_name"]
-
-            print(f"Processing round {race_round}: {race_name} ({race["date"]})")
-            for session in sessions:
+            
+            race_sessions = get_sessions_for_race(year, race_round, sessions)
+            
+            if not race_sessions:
+                print(f"No valid sessions found for {year} Round {race_round} ({race_name})")
+                continue
+            
+            print(f"Processing round {race_round}: {race_name} ({race['date']})")
+            print(f"  Sessions to scrape: {', '.join(race_sessions)}")
+            
+            for session in race_sessions:
                 stats["total"] += 1
                 
                 success = self.execute_scraper(
@@ -144,6 +148,7 @@ class F1BatchScraper:
                     stats["successful"] += 1
                 else:
                     stats["failed"] += 1
+            print() 
         
         return stats
     
@@ -179,33 +184,95 @@ class F1BatchScraper:
             time.sleep(2)
 
         return stats
+
+def IsSprintWeekend(year: int, race_round) -> bool:
+    """detects if a race round is a sprint weekend"""
+    try:
+        url = f"https://api.jolpi.ca/ergast/f1/{year}/{race_round}.json"
+        print(f"Checking sprint status for {year} Round {race_round}: {url}")
+
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        races = data["MRData"]["RaceTable"]["Races"]
+        if not races:
+            print(f"No races found for {year} Round {race_round}")
+            return False
+
+        race = races[0];
+        race_json_str = json.dumps(race, indent=2).lower()
+
+        sprint_terms = ["sprint", "sprint qualifying"]
+        has_sprint = any(term in race_json_str for term in sprint_terms)
+        
+        if has_sprint:
+            print(f"{year} Round {race_round} ({race.get('raceName', 'Unknown')}) is a SPRINT weekend")
+        else:
+            print(f"{year} Round {race_round} ({race.get('raceName', 'Unknown')}) is a standard weekend")
+        
+        return has_sprint
+    
+    except requests.RequestException as e:
+        print(f"Error fetching race data for {year} Round {race_round}: {e}")
+        return False
+    except (KeyError, IndexError, ValueError) as e:
+        print(f"Error parsing race data for {year} Round {race_round}: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error checking sprint status for {year} Round {race_round}: {e}")
+        return False
+
+def get_sessions_for_race(year: int, race_round: int, user_sessions: Optional[List[str]] = None) -> List[str]:
+    """
+    Gets the appropriate sessions for a specific race round.
+    If user_sessions is provided, filters it based on weekend type.
+    """
+    is_sprint = IsSprintWeekend(year, race_round)
+    available_sessions = []
+
+    if is_sprint:
+        available_sessions = ["FP1", "Sprint Qualifying", "Sprint", "Qualifying", "Race"]
+        print(f"Sprint weekend detected - available sessions: {', '.join(available_sessions)}")
+    else:
+        available_sessions = ["FP1", "FP2", "FP3", "Qualifying", "Race"]
+        print(f"Standard weekend detected - available sessions: {', '.join(available_sessions)}")
+
+    if user_sessions:
+        valid_sessions = [session for session in user_sessions if session in available_sessions]
+        
+        invalid_sessions = [session for session in user_sessions if session not in available_sessions]
+        if invalid_sessions:
+            print(f"Skipping invalid sessions for this weekend type: {', '.join(invalid_sessions)}")
+        
+        return valid_sessions
+    
+    return available_sessions
         
 def main():
+    all_sessions = ["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"]
+    
     parser = argparse.ArgumentParser(description="Batch Scrape F1 reddit posts & comments")
     parser.add_argument("--mode", choices=["all", "year", "specific"], default="year", help="Scraping mode: all completed races, specific year, or specific configs")
-
     parser.add_argument("--year", type=int, default=2025, help="Year to scrape (default: 2025)")
     parser.add_argument("--start_round", type=int, default=1, help="Starting round number (default: 1)")
     parser.add_argument("--end_round", type=int, default=None, help="Ending round number (default: all completed)")
-
-    sessions = ["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"]
-    parser.add_argument("--sessions", nargs="+", choices=sessions, default=sessions, help="Sessions to scrape (default: Race only)")
-
+    parser.add_argument("--sessions", nargs="+", choices=all_sessions, default=None, help="Sessions to scrape (default: auto-detect based on weekend type)")
     parser.add_argument("--script_path", default="back end/FetchPosts&Comments.py", help="Path to FetchPosts&Comments.py script")
     parser.add_argument("--subreddit", default="formula1", help="subreddit to scrape")
     parser.add_argument("--post_limit", type=int, default=50, help="Post limit per session")
     parser.add_argument("--comment_limit", type=int, default=10, help="Comment limit per post")
-
     parser.add_argument("--config", type=str, default=None, help="JSON string of specific race configs (for specific mode)")
+    
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     scraper = F1BatchScraper(args.script_path)
 
     scraper_params = {
-        "subreddit" : args.subreddit,
-        "post_limit" : args.post_limit,
-        "comment_limit" : args.comment_limit
+        "subreddit": args.subreddit,
+        "post_limit": args.post_limit,
+        "comment_limit": args.comment_limit
     }
     
     try:
@@ -218,7 +285,7 @@ def main():
 
                 year_stats = scraper.scrape_all_races(
                     year=year,
-                    sessions=args.sessions,
+                    sessions=args.sessions,  
                     **scraper_params
                 )
                 for key in total_stats:
@@ -236,12 +303,12 @@ def main():
             )
 
         elif args.mode == "specific":
-            if not args.configs:
-                print("Error: --configs required for specific mode")
-                print("Example: --configs '[{\"year\":2025,\"round\":1,\"session\":\"Race\"}]'")
+            if not args.config:
+                print("Error: --config required for specific mode")
+                print("Example: --config '[{\"year\":2025,\"round\":1,\"session\":\"Race\"}]'")
                 sys.exit(1)
 
-            race_configs = json.loads(args.configs)
+            race_configs = json.loads(args.config)
             stats = scraper.scrape_specific_race(race_configs, **scraper_params)
 
         print("\n" + "=" * 60)
