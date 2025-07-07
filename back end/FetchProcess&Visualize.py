@@ -1,18 +1,19 @@
 import os
 import sys
-import subprocess
-from urllib import request, response
-import requests
-import argparse
+import time
 import json
 import logging
+import requests
+import argparse
+import subprocess
 from datetime import datetime, date
+from urllib import request, response
 from typing import List, Dict, Optional
-import time
 
 class F1BatchScraper:
-    def __init__(self, script_path: str = "back end/FetchPosts&Comments.py"):
+    def __init__(self, script_path: str = "back end/FetchPosts&Comments.py", process_script_path: str = "back end/ProcessText.py"):
         self.script_path = script_path
+        self.process_script_path = process_script_path
         self.sessions = ["Race"]
     
     def get_completed_races(self, year: int) -> List[Dict]:
@@ -88,6 +89,11 @@ class F1BatchScraper:
                     for line in result.stdout.split('\n'):
                         if 'Successfully wrote' in line or 'records to' in line:
                             print(f"{line}")
+
+                if kwargs.get('process_sentiment', True):
+                    print(f"Processing sentiment for {year} Round {round_num} {session}...")
+                    self.execute_processor(year, round_num, session)
+                
                 return True
             else:
                 print(f"Failed to scrape {year} Round {round_num} & {session}")
@@ -185,6 +191,48 @@ class F1BatchScraper:
 
         return stats
 
+    def execute_processor(self, year: int, round_num: int, session: Optional[str] = None) -> bool:
+        """Runs ProcessText.py with given parameters & returns true if successful, else false :3"""
+        try: 
+            cmd = [
+                "python", self.process_script_path,
+                "--year", str(year),
+                "--round", str(round_num)
+            ]
+
+            if session:
+                cmd.extend(["--session", session])
+
+            print(f"Running processor: {' '.join(cmd)}")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if(result.returncode == 0):
+                print(f"Successfully processed sentiment for {year} Round {round_num} {session or 'all sessions'}")
+                if result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if 'Results saved to' in line or 'Processing batch' in line:
+                            print(f"  {line}")
+                return True
+            else:
+                print(f"Failed to process sentiment for {year} Round {round_num} {session or 'all sessions'}")
+                if result.stderr:
+                    print(f"Error: {result.stderr.strip()}")
+                return False
+        
+        except subprocess.TimeoutExpired:
+            print(f"Timeout processing sentiment for {year} Round {round_num} {session or 'all sessions'}")
+            return False
+
+        except Exception as e:
+            print(f"Exception processing sentiment for {year} Round {round_num} {session or 'all sessions'}: {e}")
+            return False
+
 def IsSprintWeekend(year: int, race_round) -> bool:
     """detects if a race round is a sprint weekend"""
     try:
@@ -263,7 +311,8 @@ def main():
     parser.add_argument("--post_limit", type=int, default=200, help="Post limit per session")
     parser.add_argument("--comment_limit", type=int, default=25, help="Comment limit per post")
     parser.add_argument("--config", type=str, default=None, help="JSON string of specific race configs (for specific mode)")
-    
+    parser.add_argument("--no_sentiment", action="store_true", help="Skip sentiment processing")
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
