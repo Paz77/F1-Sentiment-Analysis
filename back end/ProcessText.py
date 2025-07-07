@@ -124,6 +124,8 @@ def main():
     parser.add_argument("--round", type=int, required=True, help="F1 race round number")
     parser.add_argument("--session", choices=["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"], help="Specific session to analyze (optional)")
     parser.add_argument("--batch_size", type=int, default=1000, help="Batch size for processing (default: 1000)")
+    parser.add_argument("--save_csv", action="store_true", help="Save results to CSV file")
+    
     args = parser.parse_args()
 
     db = F1Database()
@@ -134,11 +136,12 @@ def main():
             session=args.session
         )
         
-        race_info = db.get_race_info_by_round(args.round, args.year)
-        if race_info:
-            output_file = f"{race_info['race_name']}_sentiment_analysis.csv"
-            df.to_csv(output_file, index=False)
-            logging.info(f"Results saved to {output_file}")
+        if args.save_csv:
+            race_info = db.get_race_info_by_round(args.round, args.year)
+            if race_info:
+                output_file = f"{race_info['race_name']}_sentiment_analysis.csv"
+                df.to_csv(output_file, index=False)
+                logging.info(f"Results saved to {output_file}")
         
     except Exception as e:
         logging.error(f"Error in main processing: {e}")
