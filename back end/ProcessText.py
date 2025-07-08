@@ -48,7 +48,6 @@ def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""
     """ proccesses sentiment directly from db"""
     db = F1Database()
     
-    # Create sentiment table if it doesn't exist
     db.add_sentiment_table()
 
     if session:
