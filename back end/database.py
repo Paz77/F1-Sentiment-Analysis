@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import List, Dict, Optional
 import os
 
+from tables import description
+
 class F1Database:
     def __init__(self, db_path: str = "f1_sentiment.db"):
         """Initialized F1 sentiment database"""
@@ -454,3 +456,42 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error saving sentiment scores: {e}")
             raise
+
+    def get_sentiment(self, session: str, race_round: int, race_year: int) -> List[Dict]:
+        """
+        Gets all sentiment for given session, race, and year.  
+        Returns list of dictionaries with sentiment
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT id FROM posts
+                    WHERE session = ? AND race_round = ? AND race_year = ?
+                ''', (session, race_round, race_year))
+                post_ids = [row[0] for row in cursor.fetchall()]
+
+                cursor.execute('''
+                    SELECT id FROM comments 
+                    WHERE session = ? AND race_round = ? AND race_year = ?
+                ''', (session, race_round, race_year))
+                comment_ids = [row[0] for row in cursor.fetchall()]
+
+                all_ids = post_ids + comment_ids
+                if not all_ids:
+                    return []
+                
+                placeholders = ','.join('?' for _ in all_ids)
+                query = f'''
+                    SELECT * FROM sentiment_scores
+                    Where id IN ({placeholders})
+                '''
+                cursor.execute(query, all_ids)
+                columns = [description[0] for description in cursor.description]
+
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+        except Exception as e:
+            logging.error(f"Error fetching sentiment for session {session}, round {race_round}, year {race_year}: {e}")
+            return []
