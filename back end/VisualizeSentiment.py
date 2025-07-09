@@ -1,40 +1,25 @@
-import pandas as pd 
-import matplotlib.pyplot as plt 
+import argparse
+import logging
+import pandas as pd
+import matplotlib.pyplot as plt
+from database import F1Database
+from datetime import datetime
 
-df = pd.read_csv("Spanish Grand Prix Sentiment.csv")
+def visualize_sentiment(db: F1Database, year: int, round_num: int, session: str):
+    if session:
 
-dailySentiment = df.groupby("created")["vader_score"].mean().reset_index()
+def main():
+    parser = argparse.ArgumentParser(description="Visualize sentiment for f1 reddit posts")
+    parser.add_argument("--year", type=int, default=datetime.now().year, help="F1 season year (default: current year)")
+    parser.add_argument("--round", type=int, required=True, help="F1 race round number")
+    parser.add_argument("--session", choices=["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"], help="Specific session to visualize (optional)")
+    args = parser.parse_args()
 
-plt.figure(figsize=(10, 5))
-plt.plot(dailySentiment["created"],
-         dailySentiment["vader_score"],
-         marker="o", linestyle="-")
-plt.title("Sentiment Over Time")
-plt.xlabel("Date")
-plt.ylabel("Sentiment Score")
-plt.xticks(rotation=45)
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.savefig("Spanish Grand Prix Sentiment.png", dpi=300)
+    db = F1Database()
+    try:
 
-dfSorted = df.sort_values("vader_score", ascending=False)
+    
 
-topPos = dfSorted.head(5).copy()
-topNeg = dfSorted.tail(5).copy()
 
-topPos["type"] = "positive"
-topNeg["type"] = "negative"
-topCombined = pd.concat([topPos, topNeg])
-
-plt.figure(figsize=(10, 6))
-bars = plt.bar(
-    topCombined["id"], 
-    topCombined["vader_score"], 
-    color=["green" if t=="positive" else "red" for t in topCombined["type"]]
-)
-plt.xticks(rotation=90)  
-plt.title("Top 5 Positive (green) and Top 5 Negative (red) Posts")
-plt.ylabel("Sentiment Score")
-plt.axhline(0, color="black", linewidth=0.8)  
-plt.tight_layout()
-plt.savefig("Spanish Grand Prix Sentiment.png", dpi=300)
+if __name__ == "__main__":
+    main()
