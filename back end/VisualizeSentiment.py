@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 from scipy.stats import alpha
 from database import F1Database
 from datetime import datetime
+import io  
 
-def visualize_sentiment_histogram(db: F1Database, year: int, round_num: int, session: str):
+def visualize_sentiment_histogram(db: F1Database, year: int, round_num: int, session: str, save_to_db: bool = True):
     try:
         data = db.get_sentiment(session, round_num, year)
         if not data:
@@ -35,7 +36,23 @@ def visualize_sentiment_histogram(db: F1Database, year: int, round_num: int, ses
         plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes, 
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
         plt.tight_layout()
-        plt.show()
+        
+        if save_to_db:
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            image_bytes = img_buffer.getvalue()
+            
+            success = db.save_visualization(session, round_num, year, 'histogram', image_bytes)
+            if success:
+                print(f"Histogram saved to database for {session}, Round {round_num}, {year}")
+            else:
+                print(f"Failed to save histogram to database")
+            
+            img_buffer.close()
+        
+        #plt.show()
+        plt.close()
 
         print(f"\nSentiment Analysis Summary for {session}, Round {round_num}, {year}:")
         print(f"Total posts/comments analyzed: {len(sentiment_scores)}")
@@ -49,7 +66,7 @@ def visualize_sentiment_histogram(db: F1Database, year: int, round_num: int, ses
         logging.error(f"Error creating visualization: {e}")
         print(f"Error: {e}")
 
-def visualize_sentiment_timeline(db: F1Database, year: int, round_num: int, session: str):
+def visualize_sentiment_timeline(db: F1Database, year: int, round_num: int, session: str, save_to_db: bool = True):
     """Creates a line graph to show average sentiment over time"""
     try:
         data = db.get_sentiment(session, round_num, year)
@@ -66,7 +83,7 @@ def visualize_sentiment_timeline(db: F1Database, year: int, round_num: int, sess
             print("No valid sentiment scores found")
             return
 
-        df_clean['hour'] = df_clean['created_at'].dt.floor('H')
+        df_clean['hour'] = df_clean['created_at'].dt.floor('h')
         hourly_avg = df_clean.groupby('hour')['vader_score'].agg(['mean', 'count']).reset_index()
 
         plt.figure(figsize=(12, 6))
@@ -97,7 +114,23 @@ def visualize_sentiment_timeline(db: F1Database, year: int, round_num: int, sess
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
         
         plt.tight_layout()
-        plt.show()
+        
+        if save_to_db:
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            image_bytes = img_buffer.getvalue()
+            
+            success = db.save_visualization(session, round_num, year, 'timeline', image_bytes)
+            if success:
+                print(f"Timeline saved to database for {session}, Round {round_num}, {year}")
+            else:
+                print(f"Failed to save timeline to database")
+            
+            img_buffer.close()
+        
+        #plt.show()
+        plt.close()
 
         print(f"\nTimeline Analysis for {session}, Round {round_num}, {year}:")
         print(f"Time range: {df_clean['created_at'].min()} to {df_clean['created_at'].max()}")
@@ -114,12 +147,16 @@ def main():
     parser.add_argument("--year", type=int, default=datetime.now().year, help="F1 season year (default: current year)")
     parser.add_argument("--round", type=int, required=True, help="F1 race round number")
     parser.add_argument("--session", choices=["FP1", "FP2", "FP3", "Sprint Qualifying", "Sprint", "Qualifying", "Race"], help="Specific session to visualize (optional)")
+    parser.add_argument("--no-save", action="store_true", help="Don't save visualizations to database")
     args = parser.parse_args()
 
     db = F1Database()
+    db.add_visualizations_table()
+    
     try:
-        visualize_sentiment_histogram(db, args.year, args.round, args.session)
-        visualize_sentiment_timeline(db, args.year, args.round, args.session)
+        save_to_db = not args.no_save
+        visualize_sentiment_histogram(db, args.year, args.round, args.session, save_to_db)
+        visualize_sentiment_timeline(db, args.year, args.round, args.session, save_to_db)
 
     except Exception as e:
         logging.error(f"Error in main: {e}")
