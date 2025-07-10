@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 import json
@@ -7,13 +6,13 @@ import requests
 import argparse
 import subprocess
 from datetime import datetime, date
-from urllib import request, response
 from typing import List, Dict, Optional
 
 class F1BatchScraper:
-    def __init__(self, script_path: str = "back end/FetchPosts&Comments.py", process_script_path: str = "back end/ProcessText.py"):
+    def __init__(self, script_path: str = "back end/FetchPosts&Comments.py", process_script_path: str = "back end/ProcessText.py", visualize_script_path: str = "back end/VisualizeSentiment.py"):
         self.script_path = script_path
         self.process_script_path = process_script_path
+        self.visualize_script_path = visualize_script_path
         self.sessions = ["Race"]
     
     def get_completed_races(self, year: int) -> List[Dict]:
@@ -70,8 +69,9 @@ class F1BatchScraper:
                 "--session", session
             ]
 
+            scraper_params = ["subreddit", "post_limit", "comment_limit", "export_csv"]
             for key, value in kwargs.items():
-                if value is not None:
+                if value is not None and key in scraper_params:
                     cmd.extend([f"--{key}", str(value)])
 
             print(f"Running: {' '.join(cmd)}")
@@ -92,7 +92,11 @@ class F1BatchScraper:
 
                 if kwargs.get('process_sentiment', True):
                     print(f"Processing sentiment for {year} Round {round_num} {session}...")
-                    self.execute_processor(year, round_num, session)
+                    sentiment_success = self.execute_processor(year, round_num, session)
+
+                    if sentiment_success and kwargs.get('create_visualizations', True):
+                        print(f"Creating visualizations for {year} Round {round_num} {session}...")
+                        self.execute_visualizer(year, round_num, session, save_to_db=kwargs.get('save_visualizations', True))
                 
                 return True
             else:
@@ -233,6 +237,51 @@ class F1BatchScraper:
             print(f"Exception processing sentiment for {year} Round {round_num} {session or 'all sessions'}: {e}")
             return False
 
+    def execute_visualizer(self, year: int, round_num: int, session: Optional[str] = None, save_to_db: bool = True) -> bool:
+        """Runs VisualizeSentiment.py & returns true if successfull, else false"""
+        try:
+            cmd = [
+                "python", self.visualize_script_path,
+                "--year", str(year),
+                "--round", str(round_num)
+            ]
+
+            if session:
+                cmd.extend(["--session", session])
+
+            if not save_to_db:
+                cmd.append("--no-save")
+
+            print(f"Running visualizer: {' '.join(cmd)}")
+
+            result = subprocess.run(
+                cmd, 
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            if result.returncode == 0:
+                print(f"Successfully created visualizations for {year} Round {round_num} {session or 'all sessions'}")
+                if result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if 'saved to database' in line or 'Sentiment Analysis Summary' in line:
+                            print(f"{line}")
+                return True
+            else:
+                print(f"Failed to create visualizations for {year} Round {round_num} {session or 'all sessions'}")
+                if result.stderr:
+                    print(f"Error: {result.stderr.strip()}")
+                return False
+        
+        except subprocess.TimeoutExpired:
+            print(f"Timeout creating visualizations for {year} Round {round_num} {session or 'all sessions'}")
+            return False
+
+        except Exception as e:
+            print(f"Exception creating visualizations for {year} Round {round_num} {session or 'all sessions'}: {e}")
+            return False
+
 def IsSprintWeekend(year: int, race_round) -> bool:
     """detects if a race round is a sprint weekend"""
     try:
@@ -312,6 +361,8 @@ def main():
     parser.add_argument("--comment_limit", type=int, default=25, help="Comment limit per post")
     parser.add_argument("--config", type=str, default=None, help="JSON string of specific race configs (for specific mode)")
     parser.add_argument("--no_sentiment", action="store_true", help="Skip sentiment processing")
+    parser.add_argument("--no_visualizations", action="store_true", help="Skip visualization creation")
+    parser.add_argument("--no_save_visualizations", action="store_true", help="Create visualizations but don't save to database")
 
     args = parser.parse_args()
 
@@ -321,7 +372,10 @@ def main():
     scraper_params = {
         "subreddit": args.subreddit,
         "post_limit": args.post_limit,
-        "comment_limit": args.comment_limit
+        "comment_limit": args.comment_limit,
+        "process_sentiment": not args.no_sentiment,
+        "create_visualizations": not args.no_visualizations,
+        "save_visualizations": not args.no_save_visualizations
     }
     
     try:
@@ -330,7 +384,7 @@ def main():
             total_stats = {"total" : 0, "successful" : 0, "failed" : 0}
 
             for year in range(2020, curr_year + 1):
-                print({f"Processing year {year}"})
+                print(f"Processing year {year}")
 
                 year_stats = scraper.scrape_all_races(
                     year=year,
@@ -367,6 +421,9 @@ def main():
         print(f"Successful: {stats['successful']}")
         print(f"Failed: {stats['failed']}")
         print(f"Success rate: {(stats['successful']/stats['total']*100):.1f}%" if stats['total'] > 0 else "0%")
+        
+        if not args.no_visualizations:
+            print(f"Visualizations were created and {'saved to database' if not args.no_save_visualizations else 'displayed only'}")
 
     except KeyboardInterrupt:
         print("\nScraping interrupted by user")
