@@ -409,6 +409,7 @@ class F1Database:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                cursor.execute('DROP TABLE IF EXISTS sentiment_scores')
                 
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS sentiment_scores (
@@ -419,6 +420,7 @@ class F1Database:
                         neutral_score REAL,
                         cleaned_text TEXT,
                         tokens TEXT,
+                        created_at TIMESTAMP, 
                         processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (id) REFERENCES posts(id) ON DELETE CASCADE,
                         FOREIGN KEY (id) REFERENCES comments(id) ON DELETE CASCADE
@@ -438,16 +440,26 @@ class F1Database:
             with sqlite3.connect(self.db_path) as conn:
                 for _, row in sentiment_data.iterrows():
                     cursor = conn.cursor()
+
+                    cursor.execute('''
+                        SELECT created FROM posts WHERE id = ?
+                        UNION
+                        SELECT created FROM comments WHERE id = ?
+                    ''', (row['id'], row['id']))
+
+                    result = cursor.fetchone()
+                    created_time  = result[0] if result else None
                     
                     cursor.execute('''
                         INSERT OR REPLACE INTO sentiment_scores 
-                        (id, vader_score, cleaned_text, tokens)
-                        VALUES (?, ?, ?, ?)
+                        (id, vader_score, cleaned_text, tokens, created_at)
+                        VALUES (?, ?, ?, ?, ?)
                     ''', (
                         row['id'],
                         row['vader_score'],
                         row['cleaned'],
-                        ' '.join(row['tokens']) if isinstance(row['tokens'], list) and len(row['tokens']) > 0 else ''
+                        ' '.join(row['tokens']) if isinstance(row['tokens'], list) and len(row['tokens']) > 0 else '',
+                        created_time
                     ))
                 
                 conn.commit()
