@@ -507,3 +507,91 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error fetching sentiment for session {session}, round {race_round}, year {race_year}: {e}")
             return []
+
+    def add_visualizations_table(self):
+        """add table to store visualizations"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS visualizations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session TEXT NOT NULL,
+                        race_round INTEGER NOT NULL,
+                        race_year INTEGER NOT NULL,
+                        visualization_type TEXT NOT NULL,
+                        image_data BLOB NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(session, race_round, race_year, visualization_type)
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_visualizations_session_round_year 
+                    ON visualizations(session, race_round, race_year)
+                ''')
+                
+                conn.commit()
+                logging.info("Visualizations table created")
+                
+        except Exception as e:
+            logging.error(f"Error creating visualizations table: {e}")
+            raise
+
+    def save_visualization(self, session: str, race_round: int, race_year: int, visualization_type: str, image_data: bytes) -> bool:
+        """saves visualization to db"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                INSERT OR REPLACE INTO visualizations 
+                (session, race_round, race_year, visualization_type, image_data)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (session, race_round, race_year, visualization_type, image_data))
+            
+            conn.commit()
+            logging.info(f"Saved {visualization_type} visualization for {session}, Round {race_round}, {race_year}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error saving visualization: {e}")
+            return False
+
+    def get_visualization(self, session: str, race_round: int, race_year: int, visualization_type: str) -> Optional[bytes]:
+        """retrieves visualization from db"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+            
+                cursor.execute('''
+                    SELECT image_data FROM visualizations
+                    WHERE session = ? AND race_round = ? AND race_year = ? AND visualization_type = ?
+                ''', (session, race_round, race_year, visualization_type))
+            
+                result = cursor.fetchone()
+                return result[0] if result else None
+            
+        except Exception as e:
+            logging.error(f"Error retrieving visualization: {e}")
+            return None
+
+    def list_available_visualizations(self) -> List[Dict]:
+        """Get a list of all available visualizations in the database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT session, race_round, race_year, visualization_type, created_at
+                    FROM visualizations
+                    ORDER BY race_year DESC, race_round DESC, session, visualization_type
+                ''')
+            
+                columns = [description[0] for description in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+        except Exception as e:
+            logging.error(f"Error listing visualizations: {e}")
+            return []
