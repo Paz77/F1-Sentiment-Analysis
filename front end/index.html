@@ -3,19 +3,57 @@
 <html>
     <head>
         <title>F1 Sentiment Analysis</title>
+        <link rel="stylesheet" href="style.css">
     </head>
     <body>
         <h1>
-            <b>F1 Sentiment Analysis Project by Elvin Paz</b>
+            <b>F1 Sentiment Analysis</b>
         </h1>
         <hr>
         <p>
-            This website tracks the sentiment the rounds & sessions for the 2025 F1 season 
+            See what fans think of the 2025 F1 season by analyzing fan sentiment from the F1 subreddit :D
         </p>
+        <main class="main-content">
+            <section>
+                <h2>Choose sentiment for round & session!</h2>
+                <form>
+                    <div>
+                        <label for="round">Select Round:</label>
+                        <select id="round" name="round">
+
+                        </select>
+                    </div>
+                    <div>
+                        <label for="session">Select Session:</label>
+                        <select id="session" name="session">
+                            <option value="">Choose a session...</option>
+                            <optgroup label="Practice Sessions">
+                                <option value="fp1">FP1 - Free Practice 1</option>
+                                <option value="fp2">FP2 - Free Practice 2</option>
+                                <option value="fp3">FP3 - Free Practice 3</option>
+                            </optgroup>
+                            <optgroup label="Qualifying">
+                                <option value="q">Regular Qualifying</option>
+                                <option value="sq">Spring Qualifying</option>
+                            </optgroup>
+                            <optgroup label="Race Sessions">
+                                <option value="sprint">Sprint Race</option>
+                                <option value="race">Main Race</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </form>
+                
+            </section>
+        </main>
         <img src="IMG_8109.jpg" height="500">
         <br>
-        <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" target="pls give me internship">
-            Github repo!
+        <p>
+            Check out my code in my github repo!
+        </p>
+        <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" title="pls give me internship">
+            CLICK ME PLS
         </a>
+        <script src="script.js"></script>
     </body>
 </html>
