@@ -13,38 +13,25 @@
         <p>
             See what fans think of the 2025 F1 season by analyzing fan sentiment from the F1 subreddit :D
         </p>
-        <main class="main-content">
-            <section>
-                <h2>Choose sentiment for round & session!</h2>
-                <form>
-                    <div>
-                        <label for="round">Select Round:</label>
-                        <select id="round" name="round">
+        <main class="dashboard-container">
+            <!-- Top Row: Round Selection -->
+            <div class="row round-row">
+                <div class="form-group">
+                    <label for="round">Select Round:</label>
+                    <select id="round" name="round">
+                        <!-- options will be populated by JavaScript -->
+                    </select>
+                </div>
+            </div>
 
-                        </select>
-                    </div>
-                    <div>
-                        <label for="session">Select Session:</label>
-                        <select id="session" name="session">
-                            <option value="">Choose a session...</option>
-                            <optgroup label="Practice Sessions">
-                                <option value="fp1">FP1 - Free Practice 1</option>
-                                <option value="fp2">FP2 - Free Practice 2</option>
-                                <option value="fp3">FP3 - Free Practice 3</option>
-                            </optgroup>
-                            <optgroup label="Qualifying">
-                                <option value="q">Regular Qualifying</option>
-                                <option value="sq">Spring Qualifying</option>
-                            </optgroup>
-                            <optgroup label="Race Sessions">
-                                <option value="sprint">Sprint Race</option>
-                                <option value="race">Main Race</option>
-                            </optgroup>
-                        </select>
-                    </div>
-                </form>
+            <!-- Second Row: Session Selection (Dynamic) -->
+            <div class="row session-row">
+                <div class="session-grid" id="session-grid">
+                    <!-- Sessions will be populated by JavaScript -->
+                </div>
                 
-            </section>
+                <button type="submit" class="analyze-btn">Analyze Sentiment</button>
+            </div>
         </main>
         <br>
         <p>
