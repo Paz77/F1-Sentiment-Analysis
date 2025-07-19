@@ -3,21 +3,24 @@
 <html>
     <head>
         <title>F1 Sentiment Analysis</title>
+        <script src="https://cdn.tailwindcss.com"></script>
         <link rel="stylesheet" href="style.css">
     </head>
-    <body>
-        <h1>
-            <b>F1 Sentiment Analysis</b>
+    <body style="background-color: #15151e;">
+        <h1 class="text-white text-5xl font-bold text-center mb-6">
+            F1 Sentiment Analysis
         </h1>
         <hr>
-        <p>
+        <p class="text-white text-2xl font-bold text-center mb-4">
             See what fans think of the 2025 F1 season by analyzing fan sentiment from the F1 subreddit :D
         </p>
-        <main class="dashboard-container">
+        <main class="dashboard-container max-w-3xl mx-auto bg-white p-48 rounded-lg shadow-lg mt-1">
             <!-- Top Row: Round Selection -->
             <div class="row round-row">
                 <div class="form-group">
-                    <label for="round">Select Round:</label>
+                    <label for="round" class="text-[#15151e]">
+                        Select Round:
+                    </label>
                     <select id="round" name="round">
                         <!-- options will be populated by JavaScript -->
                     </select>
@@ -30,16 +33,18 @@
                     <!-- Sessions will be populated by JavaScript -->
                 </div>
                 
-                <button type="submit" class="analyze-btn">Analyze Sentiment</button>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-800 transition">
+                    Analyze Sentiment
+                </button>
             </div>
         </main>
         <br>
-        <p>
+        <p class="text-white text-center">
             Check out my code in my github repo!
+            <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" title="pls give me internship" class="text-blue-700 underline hover:text-blue-400 transition">
+                CLICK ME PLS
+            </a>
         </p>
-        <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" title="pls give me internship">
-            CLICK ME PLS
-        </a>
         <script src="script.js"></script>
     </body>
 </html>
