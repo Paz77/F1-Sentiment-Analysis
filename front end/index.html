@@ -14,28 +14,37 @@
         <p class="text-white text-2xl font-bold text-center mb-4">
             See what fans think of the 2025 F1 season by analyzing fan sentiment from the F1 subreddit :D
         </p>
-        <main class="dashboard-container max-w-3xl mx-auto bg-white p-48 rounded-lg shadow-lg mt-1">
+        <main class="max-w-3xl mx-auto bg-white p-12 rounded-lg shadow-lg mt-10">
             <!-- Top Row: Round Selection -->
-            <div class="row round-row">
+            <div class="bg-gray-50 p-4 rounded mb-4 shadow text-center border-2 border-gray-300 hover:border-blue-500 transition-colors">
                 <div class="form-group">
-                    <label for="round" class="text-[#15151e]">
+                    <label for="round" class="text-[#15151e] font-medium">
                         Select Round:
                     </label>
-                    <select id="round" name="round">
+                    <select id="round" name="round" class="mt-2 p-2 border rounded">
                         <!-- options will be populated by JavaScript -->
                     </select>
                 </div>
             </div>
 
             <!-- Second Row: Session Selection (Dynamic) -->
-            <div class="row session-row">
-                <div class="session-grid" id="session-grid">
+            <div class="bg-gray-50 p-6 rounded-lg mb-4 shadow">
+                <h3 class="text-xl font-semibold mb-4 text-[#15151e] text-center">Select Sessions to Analyze</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="session-grid">
                     <!-- Sessions will be populated by JavaScript -->
                 </div>
-                
-                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-800 transition">
-                    Analyze Sentiment
-                </button>
+                <div class="mt-6">
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium">
+                        Analyze Sentiment
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 rounded mb-4 shadow flex flex-col items-center">
+                <h2 class="text-xl font-bold mb-2 text-[#15151e]">
+                    Sentiment Visualization
+                </h2>
+                <img src="https://via.placeholder.com/400x200" alt="Sentiment Visualization" class="rounded shadow-md max-w-full h-auto" id="sentiment-image">
             </div>
         </main>
         <br>
