@@ -5,8 +5,6 @@ from datetime import datetime
 from typing import List, Dict, Optional
 import os
 
-from tables import description
-
 class F1Database:
     def __init__(self, db_path: str = "f1_sentiment.db"):
         """Initialized F1 sentiment database"""
@@ -595,3 +593,10 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error listing visualizations: {e}")
             return []
+''' i just have this here for testing 
+def main():
+    
+
+if __name__ == "__main__":
+    main()
+'''
