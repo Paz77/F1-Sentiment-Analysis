@@ -18,15 +18,15 @@ interface Visualization{
 let currentRound: string | null = null;
 let selectedSessions: Set<string> = new Set();
 
-const roundSelect = document.getElementById('round') as HTMLScriptElement;
+const roundSelect = document.getElementById('round') as HTMLSelectElement;
 const sessionGrid = document.getElementById('session-grid') as HTMLDivElement;
-const analyzeButton = document.querySelector('button[type="submit]') as HTMLButtonElement;
+const analyzeButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
 const sentimentImage = document.getElementById('sentiment-image') as HTMLImageElement;
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://127.0.0.1:5000/api';
 
-document.addEventListener('DOMContentLoaded', (): void=>{
-    console.log('Page loaded, initialzing F1 Sentiment Analysis app..');
+document.addEventListener('DOMContentLoaded', (): void => {
+    console.log('Page loaded, initializing F1 Sentiment Analysis app..');
     loadRaces();
     setupEventListeners();
 });
@@ -51,7 +51,7 @@ async function loadRaces(): Promise<void>{
     }
 }
 
-async function loadSessions(roundNum: string) {
+async function loadSessions(roundNum: string): Promise<void> {
     try{
         console.log(`loading sessions for round ${roundNum}..`)
 
@@ -71,7 +71,7 @@ async function loadSessions(roundNum: string) {
     }
 }
 
-async function  analyzeSentiment(): Promise<void> {
+async function analyzeSentiment(): Promise<void> {
     if(selectedSessions.size == 0) return;
 
     analyzeButton.disabled = true;
@@ -102,3 +102,103 @@ async function  analyzeSentiment(): Promise<void> {
         updateAnalyzeButton();
     }
 }
+
+function populateRaceDropdown(races: Race[]): void {
+    roundSelect.innerHTML = '<option value="">select a race..</option>';
+
+    races.forEach((race: Race) => {
+        const option = document.createElement('option');
+        option.value = race.round;
+        option.textContent = `Round ${race.round}: ${race.name}`;
+        roundSelect.appendChild(option);
+    });
+
+    console.log(`Added ${races.length} races to dropdown`);
+}
+
+function populateSessionGrid(sessions: string[]): void {
+    sessionGrid.innerHTML = '';
+    selectedSessions.clear();
+
+    sessions.forEach((session: string) => {
+        const sessionDiv = document.createElement('div');
+        sessionDiv.className = 'session-item bg-white p-3 rounded border cursor-pointer hover:bg-gray-50 transition';
+
+        sessionDiv.innerHTML = `<input type="checkbox" id="session-${session}" class="mr-2">
+                                <label for="session-${session}" class="cursor-pointer">${session}</label>`;
+
+        const checkbox = sessionDiv.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        
+        checkbox.addEventListener('change', (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            if(target.checked){
+                selectedSessions.add(session);
+            } else {
+                selectedSessions.delete(session);
+            }
+            updateAnalyzeButton();
+        });
+
+        sessionGrid.appendChild(sessionDiv);
+    });
+
+    console.log(`Created ${sessions.length} session checkboxes`);          
+}
+
+function updateAnalyzeButton(): void {
+    const hasSelections = selectedSessions.size > 0;
+
+    analyzeButton.disabled = !hasSelections;
+
+    if(hasSelections){
+        analyzeButton.textContent = `Analyze ${selectedSessions.size} session(s)`;
+        analyzeButton.className = 'bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium';
+    } else {
+        analyzeButton.textContent = 'Select sessions to analyze';
+        analyzeButton.className = 'bg-gray-400 text-white px-6 py-3 rounded-lg w-full font-medium cursor-not-allowed';
+    }
+}
+
+function displayVisualization(visualization: Visualization): void {
+    const imgSrc = `data:image/png;base64,${visualization.data}`;
+
+    sentimentImage.src = imgSrc;
+    sentimentImage.alt = `${visualization.type} visualization`
+
+    console.log(`Displayed ${visualization.type} visualization`);
+}
+
+function setupEventListeners(): void {
+    roundSelect.addEventListener('change', (e: Event) => {
+        const target = e.target as HTMLSelectElement;
+        currentRound = target.value;
+        console.log(`race round selected ${currentRound}`);
+
+        if(currentRound){
+            loadSessions(currentRound);
+        } else {
+            sessionGrid.innerHTML = '';
+            selectedSessions.clear();
+            updateAnalyzeButton();
+        }
+    });
+
+    analyzeButton.addEventListener('click', analyzeSentiment);
+    console.log('Event listeners set up successfully');
+}
+
+function showError(message: string): void {
+    alert('Error: ' + message);
+    console.error('User error:', message);
+}
+
+function logCurrentState(): void {
+    console.log('Current state:', {
+        currentRound,
+        selectedSessions: Array.from(selectedSessions),
+        hasAnalyzeButton: !!analyzeButton,
+        hasRoundSelect: !!roundSelect
+    });
+}
+
+(window as any).logCurrentState = logCurrentState;
