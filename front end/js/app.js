@@ -1,6 +1,6 @@
 "use strict";
 let currentRound = null;
-let selectedSessions = new Set();
+let selectedSession = null;
 const roundSelect = document.getElementById('round');
 const sessionGrid = document.getElementById('session-grid');
 const analyzeButton = document.querySelector('button[type="submit"]');
@@ -48,22 +48,21 @@ async function loadSessions(roundNum) {
     }
 }
 async function analyzeSentiment() {
-    if (selectedSessions.size == 0)
+    if (!selectedSession)
         return;
     analyzeButton.disabled = true;
     analyzeButton.textContent = 'analyzing..';
     try {
         console.log('starting sentiment analysis..');
-        const session = Array.from(selectedSessions)[0];
-        console.log(`Analyzing session: ${session} for round: ${currentRound}`);
-        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${session}`);
+        console.log(`analyzing ${selectedSession} for round ${currentRound}`);
+        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}`);
         const data = await response.json();
         if (data.success && data.visualizations && data.visualizations.length > 0) {
             console.log('Visualization received:', data.visualizations[0].type);
             displayVisualization(data.visualizations[0]);
         }
         else {
-            showError('No visualizations available for this session. Try running your data processing scripts first.');
+            showError('No visualizations available for this session. Either nothing was found for this round & session or it hasn\'t happened yet.');
         }
     }
     catch (error) {
@@ -87,36 +86,33 @@ function populateRaceDropdown(races) {
 }
 function populateSessionGrid(sessions) {
     sessionGrid.innerHTML = '';
-    selectedSessions.clear();
+    selectedSession = null;
     sessions.forEach((session) => {
         const sessionDiv = document.createElement('div');
         sessionDiv.className = 'session-item bg-white p-3 rounded border cursor-pointer hover:bg-gray-50 transition';
-        sessionDiv.innerHTML = `<input type="checkbox" id="session-${session}" class="mr-2">
+        sessionDiv.innerHTML = `<input type="radio" name="session" id="session-${session}" class="mr-2">
                                 <label for="session-${session}" class="cursor-pointer">${session}</label>`;
-        const checkbox = sessionDiv.querySelector('input[type="checkbox"]');
-        checkbox.addEventListener('change', (e) => {
+        const radiobutton = sessionDiv.querySelector('input[type="radio"]');
+        radiobutton.addEventListener('change', (e) => {
             const target = e.target;
             if (target.checked) {
-                selectedSessions.add(session);
-            }
-            else {
-                selectedSessions.delete(session);
+                selectedSession = session;
             }
             updateAnalyzeButton();
         });
         sessionGrid.appendChild(sessionDiv);
     });
-    console.log(`Created ${sessions.length} session checkboxes`);
+    console.log(`Created ${sessions.length} radio buttons`);
 }
 function updateAnalyzeButton() {
-    const hasSelections = selectedSessions.size > 0;
+    const hasSelections = selectedSession !== null;
     analyzeButton.disabled = !hasSelections;
     if (hasSelections) {
-        analyzeButton.textContent = `Analyze ${selectedSessions.size} session(s)`;
+        analyzeButton.textContent = `Analyze ${selectedSession}`;
         analyzeButton.className = 'bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium';
     }
     else {
-        analyzeButton.textContent = 'Select sessions to analyze';
+        analyzeButton.textContent = 'Select session to analyze';
         analyzeButton.className = 'bg-gray-400 text-white px-6 py-3 rounded-lg w-full font-medium cursor-not-allowed';
     }
 }
@@ -136,7 +132,7 @@ function setupEventListeners() {
         }
         else {
             sessionGrid.innerHTML = '';
-            selectedSessions.clear();
+            selectedSession = null;
             updateAnalyzeButton();
         }
     });
@@ -150,7 +146,7 @@ function showError(message) {
 function logCurrentState() {
     console.log('Current state:', {
         currentRound,
-        selectedSessions: Array.from(selectedSessions),
+        selectedSession,
         hasAnalyzeButton: !!analyzeButton,
         hasRoundSelect: !!roundSelect
     });

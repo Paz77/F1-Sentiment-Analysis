@@ -16,7 +16,7 @@ interface Visualization{
 }
 
 let currentRound: string | null = null;
-let selectedSessions: Set<string> = new Set();
+let selectedSession: string | null = null;
 
 const roundSelect = document.getElementById('round') as HTMLSelectElement;
 const sessionGrid = document.getElementById('session-grid') as HTMLDivElement;
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', (): void => {
 
 async function loadRaces(): Promise<void>{
     try{
-        console.log('loading races from API..')
+        console.log('loading races from API..');
         
         const response = await fetch(`${API_BASE}/races`);
         const data: ApiResponse<Race[]> = await response.json();
@@ -72,25 +72,23 @@ async function loadSessions(roundNum: string): Promise<void> {
 }
 
 async function analyzeSentiment(): Promise<void> {
-    if(selectedSessions.size == 0) return;
+    if(!selectedSession) return;
 
     analyzeButton.disabled = true;
-    analyzeButton.textContent = 'analyzing..'
+    analyzeButton.textContent = 'analyzing..';
 
     try{
         console.log('starting sentiment analysis..');
+        console.log(`analyzing ${selectedSession} for round ${currentRound}`);
 
-        const session = Array.from(selectedSessions)[0];
-        console.log(`Analyzing session: ${session} for round: ${currentRound}`);
-
-        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${session}`);
+        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}`);
         const data: ApiResponse<Visualization[]> = await response.json();
 
         if (data.success && data.visualizations && data.visualizations.length > 0) {
             console.log('Visualization received:', data.visualizations[0].type);
             displayVisualization(data.visualizations[0]);
         } else {
-            showError('No visualizations available for this session. Try running your data processing scripts first.');
+            showError('No visualizations available for this session. Either nothing was found for this round & session or it hasn\'t happened yet.');
         }
     }
     catch(error){
@@ -118,23 +116,21 @@ function populateRaceDropdown(races: Race[]): void {
 
 function populateSessionGrid(sessions: string[]): void {
     sessionGrid.innerHTML = '';
-    selectedSessions.clear();
+    selectedSession = null;
 
     sessions.forEach((session: string) => {
         const sessionDiv = document.createElement('div');
         sessionDiv.className = 'session-item bg-white p-3 rounded border cursor-pointer hover:bg-gray-50 transition';
 
-        sessionDiv.innerHTML = `<input type="checkbox" id="session-${session}" class="mr-2">
+        sessionDiv.innerHTML = `<input type="radio" name="session" id="session-${session}" class="mr-2">
                                 <label for="session-${session}" class="cursor-pointer">${session}</label>`;
 
-        const checkbox = sessionDiv.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        const radiobutton = sessionDiv.querySelector('input[type="radio"]') as HTMLInputElement;
         
-        checkbox.addEventListener('change', (e: Event) => {
+        radiobutton.addEventListener('change', (e: Event) => {
             const target = e.target as HTMLInputElement;
             if(target.checked){
-                selectedSessions.add(session);
-            } else {
-                selectedSessions.delete(session);
+                selectedSession = session;
             }
             updateAnalyzeButton();
         });
@@ -142,19 +138,19 @@ function populateSessionGrid(sessions: string[]): void {
         sessionGrid.appendChild(sessionDiv);
     });
 
-    console.log(`Created ${sessions.length} session checkboxes`);          
+    console.log(`Created ${sessions.length} radio buttons`);          
 }
 
 function updateAnalyzeButton(): void {
-    const hasSelections = selectedSessions.size > 0;
+    const hasSelections = selectedSession !== null;
 
     analyzeButton.disabled = !hasSelections;
 
     if(hasSelections){
-        analyzeButton.textContent = `Analyze ${selectedSessions.size} session(s)`;
+        analyzeButton.textContent = `Analyze ${selectedSession}`;
         analyzeButton.className = 'bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium';
     } else {
-        analyzeButton.textContent = 'Select sessions to analyze';
+        analyzeButton.textContent = 'Select session to analyze';
         analyzeButton.className = 'bg-gray-400 text-white px-6 py-3 rounded-lg w-full font-medium cursor-not-allowed';
     }
 }
@@ -178,7 +174,7 @@ function setupEventListeners(): void {
             loadSessions(currentRound);
         } else {
             sessionGrid.innerHTML = '';
-            selectedSessions.clear();
+            selectedSession = null;
             updateAnalyzeButton();
         }
     });
@@ -195,7 +191,7 @@ function showError(message: string): void {
 function logCurrentState(): void {
     console.log('Current state:', {
         currentRound,
-        selectedSessions: Array.from(selectedSessions),
+        selectedSession,
         hasAnalyzeButton: !!analyzeButton,
         hasRoundSelect: !!roundSelect
     });
