@@ -44,17 +44,17 @@ def get_sessions(round_num: int):
 
         sessions = []
         session_types = [
-            "FirstPractice",
-            "SecondPractice",
-            "ThirdPractice",
-            "Qualifying",
-            "Sprint",
-            "SprintQualifying"
+            ("FirstPractice", "FP1"),
+            ("SecondPractice", "FP2"), 
+            ("ThirdPractice", "FP3"),
+            ("Qualifying", "Qualifying"),
+            ("Sprint", "Sprint"),
+            ("SprintQualifying", "Sprint Qualifying")
         ]
 
-        for session in session_types:
-            if session in race:
-                sessions.append(session)
+        for session_key, session_name in session_types:
+            if session_key in race:
+                sessions.append(session_name)
         sessions.append("Race")
 
         return jsonify({"success": True, "sessions": sessions})
