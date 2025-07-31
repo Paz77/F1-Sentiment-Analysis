@@ -17,6 +17,7 @@ interface Visualization{
 
 let currentRound: string | null = null;
 let selectedSession: string | null = null;
+let selectedVisualizationType: string = 'timeline';
 
 const roundSelect = document.getElementById('round') as HTMLSelectElement;
 const sessionGrid = document.getElementById('session-grid') as HTMLDivElement;
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', (): void => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
     loadRaces();
     setupEventListeners();
+    testRadioButtons(); // Add this line
 });
 
 async function loadRaces(): Promise<void>{
@@ -36,6 +38,10 @@ async function loadRaces(): Promise<void>{
         console.log('loading races from API..');
         
         const response = await fetch(`${API_BASE}/races`);
+        if(!response.ok){
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data: ApiResponse<Race[]> = await response.json();
 
         if(data.success && data.races){
@@ -71,17 +77,31 @@ async function loadSessions(roundNum: string): Promise<void> {
     }
 }
 
+function getSelectedVisualizationType(): string {
+    const selectedRadio = document.querySelector('input[name="viz-type"]:checked') as HTMLInputElement;
+    return selectedRadio ? selectedRadio.value : 'timeline';
+}
+
 async function analyzeSentiment(): Promise<void> {
     if(!selectedSession) return;
+
+    console.log('=== DEBUG INFO ===');
+    console.log('selectedSession:', selectedSession);
+    console.log('currentRound:', currentRound);
+    console.log('selectedVisualizationType (global):', selectedVisualizationType);
+    console.log('getSelectedVisualizationType():', getSelectedVisualizationType());
+    console.log('==================');
 
     analyzeButton.disabled = true;
     analyzeButton.textContent = 'analyzing..';
 
     try{
-        console.log('starting sentiment analysis..');
-        console.log(`analyzing ${selectedSession} for round ${currentRound}`);
+        const visType = getSelectedVisualizationType();
 
-        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}`);
+        console.log('starting sentiment analysis..');
+        console.log(`analyzing ${selectedSession} for round ${currentRound} with ${visType} visualization`);
+
+        const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}?type=${visType}`);
         const data: ApiResponse<Visualization[]> = await response.json();
 
         if (data.success && data.visualizations && data.visualizations.length > 0) {
@@ -164,6 +184,21 @@ function displayVisualization(visualization: Visualization): void {
     console.log(`Displayed ${visualization.type} visualization`);
 }
 
+function testRadioButtons(): void {
+    console.log('=== TESTING RADIO BUTTONS ===');
+    const radioButtons = document.querySelectorAll('input[name="viz-type"]');
+    console.log('Found radio buttons:', radioButtons.length);
+    
+    radioButtons.forEach((radio, index) => {
+        const input = radio as HTMLInputElement;
+        console.log(`Radio ${index}: value="${input.value}", checked=${input.checked}`);
+    });
+    
+    const checkedRadio = document.querySelector('input[name="viz-type"]:checked') as HTMLInputElement;
+    console.log('Currently checked:', checkedRadio ? checkedRadio.value : 'none');
+    console.log('============================');
+}
+
 function setupEventListeners(): void {
     roundSelect.addEventListener('change', (e: Event) => {
         const target = e.target as HTMLSelectElement;
@@ -180,6 +215,31 @@ function setupEventListeners(): void {
     });
 
     analyzeButton.addEventListener('click', analyzeSentiment);
+
+    console.log('Setting up radio button event listeners...');
+    const radioButtons = document.querySelectorAll('input[name="viz-type"]');
+    console.log('Found radio buttons:', radioButtons.length);
+
+    radioButtons.forEach((radio, index) => {
+        const input = radio as HTMLInputElement;
+        console.log(`Setting up listener for radio ${index}: value="${input.value}", checked=${input.checked}`);
+        
+        radio.addEventListener('change', (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            console.log('Radio button clicked!');
+            console.log('Previous value:', selectedVisualizationType);
+            console.log('New value:', target.value);
+            
+            selectedVisualizationType = target.value;
+            console.log(`Visualization type changed to: ${selectedVisualizationType}`);
+            
+            if(selectedSession) {
+                console.log('Auto-refreshing visualization with new type...');
+                analyzeSentiment();
+            }
+        });
+    });
+    
     console.log('Event listeners set up successfully');
 }
 
