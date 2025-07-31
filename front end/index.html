@@ -4,6 +4,151 @@
     <head>
         <title>F1 Sentiment Analysis</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <!-- Add F1-style font -->
+        <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <!-- Add custom CSS -->
+        <style>
+            :root {
+                --f1-red: #e10600;
+                --f1-dark: #15151e;
+                --f1-light: #f4f4f4;
+                --f1-accent: #ff6b35;
+                --f1-success: #00d4aa;
+                --f1-warning: #ffa500;
+                --f1-danger: #dc3545;
+            }
+            
+            .f1-title {
+                font-family: 'Rajdhani', sans-serif;
+                font-weight: 700;
+                letter-spacing: 2px;
+            }
+            
+            .f1-subtitle {
+                font-family: 'Rajdhani', sans-serif;
+                font-weight: 500;
+                letter-spacing: 1px;
+            }
+            
+            .analysis-card {
+                background: linear-gradient(135deg, #23233a 0%, #2a2a4a 100%);
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+            }
+            
+            .session-card {
+                background: white;
+                border: 2px solid #e5e7eb;
+                border-radius: 12px;
+                padding: 16px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                min-height: 44px;
+            }
+            
+            .session-card:hover {
+                border-color: var(--f1-red);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(225, 6, 0, 0.2);
+            }
+            
+            .session-card.selected {
+                border-color: var(--f1-red);
+                background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+            }
+            
+            .btn-primary {
+                background: linear-gradient(135deg, var(--f1-red) 0%, #c10505 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                min-height: 44px;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(225, 6, 0, 0.3);
+            }
+            
+            .btn-primary:disabled {
+                background: #6b7280;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+            
+            .spinner {
+                width: 40px;
+                height: 40px;
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid var(--f1-red);
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 0 auto;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            
+            .toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                z-index: 1000;
+                animation: slideIn 0.3s ease;
+            }
+            
+            .toast-error {
+                background: var(--f1-danger);
+            }
+            
+            .toast-success {
+                background: var(--f1-success);
+            }
+            
+            .toast-info {
+                background: var(--f1-accent);
+            }
+            
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            
+            .skeleton-loader {
+                background: #f3f4f6;
+                border-radius: 8px;
+                overflow: hidden;
+                position: relative;
+            }
+            
+            .skeleton-image {
+                width: 100%;
+                height: 300px;
+                background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+                background-size: 200% 100%;
+                animation: loading 1.5s infinite;
+            }
+            
+            @keyframes loading {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+        </style>
     </head>
     <body style="background-color: #15151e;">
         <!-- Left Side Image -->
@@ -19,71 +164,94 @@
         <!-- Main Content Container -->
         <div class="relative z-20">
             <div class="flex justify-center mb-6">
-                <div class="bg-[#23233a] bg-opacity-100 shadow-lg inline-block z-30 w-[1500px] h-[100px] flex items-center justify-center">
-                    <h1 class="text-white text-5xl font-bold text-center m-0">
-                        F1 Sentiment Analysis
-                    </h1>
-                </div>
+                <h1 class="text-white text-5xl font-bold text-center m-0">
+                    F1 Sentiment Analysis
+                </h1>
             </div>
-            <p class="text-white text-xl font-bold text-center mb-2">
+            <p class="f1-subtitle text-white text-xl font-bold text-center mb-2">
                 F1 2025 Season Sentiment Analysis
             </p>
             <p class="text-white text-lg text-center mb-4 text-gray-300">
                 Powered by Reddit fan discussions
             </p>
-            <main class="max-w-3xl mx-auto bg-white p-12 rounded-lg shadow-lg mt-10">
-                <!-- Top Row: Round Selection -->
-                <div class="bg-gray-50 p-4 rounded mb-4 shadow text-center border-2 border-gray-300">
-                    <div class="form-group">
-                        <label for="round" class="text-[#15151e] font-medium">
-                            Select Round:
+            
+            <main class="max-w-4xl mx-auto px-4">
+                <!-- Round Selection Card -->
+                <div class="analysis-card p-6 mb-6">
+                    <div class="text-center">
+                        <label for="round" class="f1-subtitle text-white font-medium block mb-3">
+                            SELECT RACE ROUND
                         </label>
-                        <select id="round" name="round" class="mt-2 p-2 border rounded">
+                        <select id="round" name="round" class="w-full max-w-md p-3 border rounded-lg bg-white text-gray-800 font-medium">
                             <!-- options will be populated by JavaScript -->
                         </select>
                     </div>
                 </div>
 
-                <!-- Second Row: Session Selection (Dynamic) -->
-                <div class="bg-gray-50 p-6 rounded-lg mb-4 shadow border-2 border-gray-300">
-                    <h3 class="text-xl font-semibold mb-4 text-[#15151e] text-center">Select Sessions to Analyze</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="session-grid">
+                <!-- Session Selection Card -->
+                <div class="analysis-card p-6 mb-6">
+                    <h3 class="f1-subtitle text-xl font-semibold mb-6 text-white text-center">SELECT SESSION TO ANALYZE</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="session-grid">
                         <!-- Sessions will be populated by JavaScript -->
                     </div>
-                    <div class="mt-6">
-                        <button type="submit" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium">
-                            Analyze Sentiment
+                    
+                    <!-- Loading Spinner -->
+                    <div id="loading-spinner" class="hidden text-center py-8">
+                        <div class="spinner"></div>
+                        <p class="text-white mt-4 f1-subtitle">Loading sessions...</p>
+                    </div>
+                    
+                    <div class="mt-8">
+                        <button type="submit" class="btn-primary w-full">
+                            Select session to analyze
                         </button>
                     </div>
                 </div>
 
-                <div class="bg-gray-50 p-4 rounded mb-4 shadow text-center border-2 border-gray-300">
-                    <h3 class="text-lg font-semibold mb-3 text-[#15151e]">
-                        Visualization Type
+                <!-- Visualization Type Card -->
+                <div class="analysis-card p-6 mb-6">
+                    <h3 class="f1-subtitle text-lg font-semibold mb-4 text-white text-center">
+                        VISUALIZATION TYPE
                     </h3>
-                    <div class="flex justify-center space-x-4">
+                    <div class="flex justify-center space-x-6">
                         <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="viz-type" value="timeline" class="mr-2" checked>
-                            <span class="text-[#15151e]">Timeline</span>
+                            <input type="radio" name="viz-type" value="timeline" class="mr-3 w-4 h-4 text-red-600" checked>
+                            <span class="text-white f1-subtitle">Timeline</span>
                         </label>
                         <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="viz-type" value="histogram" class="mr-2">
-                            <span class="text-[#15151e]">Histogram</span>
+                            <input type="radio" name="viz-type" value="histogram" class="mr-3 w-4 h-4 text-red-600">
+                            <span class="text-white f1-subtitle">Histogram</span>
                         </label>
                     </div>
                 </div>
 
-                <div class="bg-gray-50 p-4 rounded mb-4 shadow border-2 border-gray-300 flex flex-col items-center">
-                    <h2 class="text-xl font-bold mb-2 text-[#15151e]">
-                        Sentiment Visualization
-                    </h2>
-                    <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzY2NzM4NyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIHZpc3VhbGl6YXRpb24gYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==" alt="Sentiment Visualization" class="rounded shadow-md max-w-full h-auto" id="sentiment-image">
+                <!-- Visualization Results Card -->
+                <div class="analysis-card p-6 mb-6">
+                    <div class="text-center mb-4">
+                        <h2 class="f1-subtitle text-xl font-bold text-white">
+                            SENTIMENT VISUALIZATION
+                        </h2>
+                    </div>
+                    
+                    <!-- Skeleton Loader -->
+                    <div id="viz-skeleton" class="skeleton-loader hidden">
+                        <div class="skeleton-image"></div>
+                    </div>
+                    
+                    <!-- Visualization Image -->
+                    <div class="flex justify-center">
+                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzY2NzM4NyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIHZpc3VhbGl6YXRpb24gYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==" 
+                             alt="Sentiment Visualization" 
+                             class="rounded-lg shadow-lg max-w-full h-auto" 
+                             id="sentiment-image">
+                    </div>
                 </div>
             </main>
+            
             <br>
             <p class="text-white text-center">
                 Check out my code in my github repo!
-                <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" title="pls give me internship" class="text-blue-700 underline hover:text-blue-400 transition">
+                <a href="https://github.com/Paz77/F1-Sentiment-Analysis" target="_blank" title="pls give me internship" class="text-blue-400 underline hover:text-blue-300 transition">
                     click me pls
                 </a>
             </p>
