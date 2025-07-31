@@ -1,6 +1,7 @@
+from numpy import histogram
 import requests
 import base64
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from database import F1Database
 
@@ -64,21 +65,26 @@ def get_sessions(round_num: int):
 
 @app.route('/api/visualizations/<int:round_num>/<string:session>', methods=['GET'])
 def get_visualizations(round_num: int, session: str):
+    viz_type = request.args.get('type', 'timeline')
+
     try:
         if round_num < 1 or round_num > 24:
             return jsonify({"success": False, "error": "Round number must be between 1 and 24 for 2025 season"}), 400
+
+        valid_types =["timeline", "histogram"]
+        if viz_type not in valid_types:
+            return jsonify({"success": False, "error": f"invalid visualizatoin type, must be one of the following: {valid_types}"}), 400
         
         db = F1Database()
         visualizations = []
+        vis_bytes = db.get_visualization(session, round_num, 2025, viz_type)
 
-        for vis_type in ["histogram", "timeline"]:
-            vis_bytes = db.get_visualization(session, round_num, 2025, vis_type)
-            if vis_bytes:
-                vis_base64 = base64.b64encode(vis_bytes).decode('utf-8')
-                visualizations.append({
-                    "type": vis_type,
-                    "data": vis_base64
-                })
+        if vis_bytes:
+            visualizations.append({
+                "type": viz_type,
+                "data": base64.b64encode(vis_bytes).decode('utf-8')
+            })
+
 
         if visualizations:
             return jsonify({"success": True, "visualizations": visualizations})
