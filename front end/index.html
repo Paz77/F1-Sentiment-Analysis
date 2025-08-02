@@ -284,6 +284,69 @@
                 animation: progress 2s ease-in-out infinite;
             }
 
+            .card-hidden{
+                opacity: 0;
+                transform: translateY(20px);
+                pointer-events: none;
+            }
+
+            .card-visible{
+                opacity: 1;
+                transform: translateY(0);
+                pointer-events: auto;
+                transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .progress-indicator{
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-bottom: 2rem;
+                gap: 1rem;
+            }
+
+            .progress-step{
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                font-size: 14px;
+                transition: all 0.3s ease;
+                border: 2px solid var(--f1-red);
+                color: var(--f1-red);
+                background: transparent;
+            }
+
+            .progress-step.active{
+                background: var(--f1-red);
+                color: white;
+                transform: scale(1.1);
+            }
+
+            .progress-step.completed{
+                background: var(--f1-success);
+                border-color: var(--f1-success);
+                color: white;
+            }
+
+            .progress-line{
+                width: 60px;
+                height: 2px;
+                background: #374151;
+                transition: background 0.3s ease;
+            }
+
+            .progress-line.active{
+                background: var(--f1-red);
+            }
+
+            .progress-line.completed{
+                background: var(--f1-success);
+            }
+
             .session-card:nth-child(1) { animation-delay: 0.1s; }
             .session-card:nth-child(2) { animation-delay: 0.2s; }
             .session-card:nth-child(3) { animation-delay: 0.3s; }
@@ -294,13 +357,13 @@
     </head>
     <body style="background-color: #15151e;">
         <!-- Left Side Image -->
-        <div class="fixed z-10 hidden lg:block" style="top: 11%; left: 3rem;">
-            <img src="../images/left.jpg" alt="F1 Car Left" class="w-48 h-auto opacity-60 hover:opacity-80 transition-opacity">
+        <div class="fixed z-10 hidden lg:block" style="top: 0%; left: 1rem;">
+            <img src="../images/left.jpg" alt="F1 Car Left" class="w-64 h-auto opacity-60 hover:opacity-80 transition-opacity">
         </div>
 
         <!-- Right Side Image -->
-        <div class="fixed z-10 hidden lg:block" style="top: 11%; right: 3rem;">
-            <img src="../images/right.jpg" alt="F1 Car Right" class="w-48 h-auto opacity-60 hover:opacity-80 transition-opacity">
+        <div class="fixed z-10 hidden lg:block" style="top: 0%; right: 1rem;">
+            <img src="../images/right.jpg" alt="F1 Car Right" class="w-64 h-auto opacity-60 hover:opacity-80 transition-opacity">
         </div>
 
         <!-- Main Content Container -->
@@ -322,16 +385,16 @@
                     <h3 class="f1-subtitle text-xl font-semibold mb-4 text-white text-center">
                         Getting Started!
                     </h3>
-                    <div class="text-white text-xl font-semibold mb-4 text-white text-center">
-                        <p>1. Select a race round from the dropdown above</p>
-                        <p>2. Choose a session to analyze (Practice, Qualifying, or Race)</p>
-                        <p>3. Pick your preferred visualization type</p>
-                        <p>4. Click "Analyze" to see sentiment results!</p>
+                    <div class="text-white text-center space-y-2">
+                        <p class="text-lg">1. Select a race round from the dropdown below</p>
+                        <p class="text-lg">2. Choose a session to analyze (Practice, Qualifying, or Race)</p>
+                        <p class="text-lg">3. Pick your preferred visualization type</p>
+                        <p class="text-lg">4. Click "Analyze" to see sentiment results!</p>
                     </div>
                 </div>
                 
                 <!-- Round Selection Card -->
-                <div class="analysis-card p-6 mb-6">
+                <div class="analysis-card p-6 mb-6" id="round-selection">
                     <div class="text-center">
                         <label for="round" class="f1-subtitle text-white font-medium block mb-3">
                             SELECT RACE ROUND
@@ -342,8 +405,7 @@
                     </div>
                 </div>
 
-                <!-- Session Selection Card -->
-                <div class="analysis-card p-6 mb-6">
+                <div class="analysis-card p-6 mb-6 hidden" id="session-selection">
                     <h3 class="f1-subtitle text-xl font-semibold mb-6 text-white text-center">SELECT SESSION TO ANALYZE</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="session-grid">
                         <!-- Sessions will be populated by JavaScript -->
@@ -362,8 +424,7 @@
                     </div>
                 </div>
 
-                <!-- Visualization Type Card -->
-                <div class="analysis-card p-6 mb-6">
+                <div class="analysis-card p-6 mb-6 hidden" id="visualization-selection">
                     <h3 class="f1-subtitle text-lg font-semibold mb-4 text-white text-center">
                         VISUALIZATION TYPE
                     </h3>
@@ -379,8 +440,7 @@
                     </div>
                 </div>
 
-                <!-- Visualization Results Card -->
-                <div class="analysis-card p-6 mb-6">
+                <div class="analysis-card p-6 mb-6 hidden" id="results-card">
                     <div class="text-center mb-4">
                         <h2 class="f1-subtitle text-xl font-bold text-white">
                             SENTIMENT VISUALIZATION
