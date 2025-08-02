@@ -1,13 +1,61 @@
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
     <head>
         <title>F1 Sentiment Analysis</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="F1 2025 Season Sentiment Analysis powered by Reddit fan discussions">
+        <meta name="keywords" content="F1, Formula 1, sentiment analysis, Reddit">
+        <meta name="author" content="Elvin Paz">
         <script src="https://cdn.tailwindcss.com"></script>
-        <!-- Add F1-style font -->
+        
         <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <!-- Add custom CSS -->
         <style>
+            @keyframes fadeInScale {
+                from {
+                    opacity: 0;
+                    transform: scale(0.8);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+            }
+
+            @keyframes loading {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+
+            @keyframes progress {
+                0% { width: 0%; }
+                50% { width: 70%; }
+                100% { width: 100%; }
+            }
+
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
             :root {
                 --f1-red: #e10600;
                 --f1-dark: #15151e;
@@ -36,27 +84,83 @@
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 backdrop-filter: blur(10px);
+                animation: fadeInUp 0.6s ease-out;
             }
             
             .session-card {
-                background: white;
+                background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
                 border: 2px solid #e5e7eb;
-                border-radius: 12px;
-                padding: 16px;
+                border-radius: 16px;
+                padding: 1.5rem;
                 cursor: pointer;
-                transition: all 0.3s ease;
-                min-height: 44px;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative;
+                overflow: hidden;
+                min-height: 80px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: fadeInScale 0.4s ease-out;
+                animation-fill-mode: both;
             }
-            
+
+            .session-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(225, 6, 0, 0.1), transparent);
+                transition: left 0.5s ease;
+            }
+
+            .session-card:hover::before {
+                left: 100%;
+            }
+
             .session-card:hover {
                 border-color: var(--f1-red);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(225, 6, 0, 0.2);
+                transform: translateY(-4px) scale(1.02);
+                box-shadow: 0 12px 24px rgba(225, 6, 0, 0.15);
             }
-            
+
             .session-card.selected {
                 border-color: var(--f1-red);
                 background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+                transform: translateY(-2px);
+                box-shadow: 0 8px 16px rgba(225, 6, 0, 0.2);
+            }
+
+            .session-card.selected::after {
+                content: '✓';
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background: var(--f1-red);
+                color: white;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: bold;
+            }
+
+            .session-name {
+                font-family: 'Rajdhani', sans-serif;
+                font-weight: 600;
+                font-size: 1.1rem;
+                color: #374151;
+                text-align: center;
+                letter-spacing: 0.5px;
+            }
+
+            .session-card.selected .session-name {
+                color: var(--f1-red);
+                font-weight: 700;
             }
             
             .btn-primary {
@@ -95,11 +199,6 @@
                 margin: 0 auto;
             }
             
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            
             .toast {
                 position: fixed;
                 top: 20px;
@@ -123,10 +222,12 @@
             .toast-info {
                 background: var(--f1-accent);
             }
-            
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+
+            .toast-container{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 10000;
             }
             
             .skeleton-loader {
@@ -143,11 +244,52 @@
                 background-size: 200% 100%;
                 animation: loading 1.5s infinite;
             }
-            
-            @keyframes loading {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
+
+            .loading-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(21, 21, 30, 0.9);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                backdrop-filter: blur(5px);
             }
+
+            .loading-card {
+                background: linear-gradient(135deg, #23233a 0%, #2a2a4a 100%);
+                border-radius: 16px;
+                padding: 2rem;
+                text-align: center;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            }
+
+            .progress-bar {
+                width: 100%;
+                height: 4px;
+                background: #374151;
+                border-radius: 2px;
+                overflow: hidden;
+                margin: 1rem 0;
+            }
+
+            .progress-fill {
+                height: 100%;
+                background: linear-gradient(90deg, var(--f1-red), var(--f1-accent));
+                border-radius: 2px;
+                animation: progress 2s ease-in-out infinite;
+            }
+
+            .session-card:nth-child(1) { animation-delay: 0.1s; }
+            .session-card:nth-child(2) { animation-delay: 0.2s; }
+            .session-card:nth-child(3) { animation-delay: 0.3s; }
+            .session-card:nth-child(4) { animation-delay: 0.4s; }
+            .session-card:nth-child(5) { animation-delay: 0.5s; }
+            .session-card:nth-child(6) { animation-delay: 0.6s; }
         </style>
     </head>
     <body style="background-color: #15151e;">
@@ -182,7 +324,7 @@
                         <label for="round" class="f1-subtitle text-white font-medium block mb-3">
                             SELECT RACE ROUND
                         </label>
-                        <select id="round" name="round" class="w-full max-w-md p-3 border rounded-lg bg-white text-gray-800 font-medium">
+                        <select id="round" name="round" aria-label="Select race round" class="w-full max-w-md p-3 border rounded-lg bg-white text-gray-800 font-medium">
                             <!-- options will be populated by JavaScript -->
                         </select>
                     </div>
@@ -258,4 +400,5 @@
         </div>
         <script src="js/app.js"></script>
     </body>
+    <div id="toast-container" class="toast-container"></div>
 </html>
