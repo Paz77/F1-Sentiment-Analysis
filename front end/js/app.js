@@ -6,12 +6,18 @@ const roundSelect = document.getElementById('round');
 const sessionGrid = document.getElementById('session-grid');
 const analyzeButton = document.querySelector('button[type="submit"]');
 const sentimentImage = document.getElementById('sentiment-image');
+const gettingStartedCard = document.getElementById('getting-started');
+const roundSelectionCard = document.getElementById('round-selection');
+const sessionSelectionCard = document.getElementById('session-selection');
+const visualizationSelectionCard = document.getElementById('visualization-selection');
+const resultsCard = document.getElementById('results-card');
+let currStep = 1;
 const API_BASE = 'http://127.0.0.1:5000/api';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
     loadRaces();
     setupEventListeners();
-    testRadioButtons(); // Add this line
+    testRadioButtons();
 });
 async function loadRaces() {
     try {
@@ -113,6 +119,7 @@ function populateSessionGrid(sessions) {
             const target = e.target;
             if (target.checked) {
                 selectedSession = session;
+                resetToStep(2);
             }
             updateAnalyzeButton();
         });
@@ -125,7 +132,7 @@ function updateAnalyzeButton() {
     analyzeButton.disabled = !hasSelections;
     if (hasSelections) {
         analyzeButton.textContent = `Analyze ${selectedSession}`;
-        analyzeButton.className = 'bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition w-full font-medium';
+        analyzeButton.className = 'btn-primary w-full';
     }
     else {
         analyzeButton.textContent = 'Select session to analyze';
@@ -156,15 +163,24 @@ function setupEventListeners() {
         currentRound = target.value;
         console.log(`race round selected ${currentRound}`);
         if (currentRound) {
+            resetToStep(2);
             loadSessions(currentRound);
         }
         else {
+            resetToStep(1);
             sessionGrid.innerHTML = '';
             selectedSession = null;
             updateAnalyzeButton();
         }
     });
-    analyzeButton.addEventListener('click', analyzeSentiment);
+    analyzeButton.addEventListener('click', () => {
+        if (!selectedSession || !currentRound) {
+            showToast('Please select a session first!', 'error');
+            return;
+        }
+        analyzeSentiment();
+        resetToStep(4);
+    });
     console.log('Setting up radio button event listeners...');
     const radioButtons = document.querySelectorAll('input[name="viz-type"]');
     console.log('Found radio buttons:', radioButtons.length);
@@ -178,7 +194,7 @@ function setupEventListeners() {
             console.log('New value:', target.value);
             selectedVisualizationType = target.value;
             console.log(`Visualization type changed to: ${selectedVisualizationType}`);
-            if (selectedSession) {
+            if (selectedSession && currentRound) {
                 console.log('Auto-refreshing visualization with new type...');
                 analyzeSentiment();
             }
@@ -187,7 +203,7 @@ function setupEventListeners() {
     console.log('Event listeners set up successfully');
 }
 function showError(message) {
-    alert('Error: ' + message);
+    showToast(message, 'error');
     console.error('User error:', message);
 }
 function logCurrentState() {
@@ -197,5 +213,100 @@ function logCurrentState() {
         hasAnalyzeButton: !!analyzeButton,
         hasRoundSelect: !!roundSelect
     });
+}
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    const container = document.getElementById('toast-container');
+    container?.appendChild(toast);
+    setTimeout(() => {
+        toast.remove();
+    }, 5000);
+}
+function setupProgressIndicator() {
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-indicator';
+    progressContainer.innerHTML = `
+        <div class="progress-step active" data-step="1">1</div>
+        <div class="progress-line" data-line="1"></div>
+        <div class="progress-step" data-step="2">2</div>
+        <div class="progress-line" data-line="2"></div>
+        <div class="progress-step" data-step="3">3</div>
+        <div class="progress-line" data-line="3"></div>
+        <div class="progress-step" data-step="4">4</div>
+        `;
+    const header = document.querySelector('h1');
+    header?.parentNode?.insertBefore(progressContainer, header.nextSibling);
+}
+function showCard(cardId) {
+    const card = document.getElementById(cardId);
+    if (card) {
+        card.classList.remove('hidden');
+        card.classList.add('card-visible');
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+}
+function hideCard(cardId) {
+    const card = document.getElementById(cardId);
+    if (card) {
+        card.classList.add('hidden');
+        card.classList.remove('card-visible');
+    }
+}
+function updateProgress(step) {
+    currStep = step;
+    for (let i = 1; i <= 4; i++) {
+        const stepElement = document.querySelector(`[data-step="${i}"]`);
+        const lineElement = document.querySelector(`[data-line="${i}"]`);
+        if (stepElement && lineElement) {
+            if (i < step) {
+                // Completed steps
+                stepElement.classList.remove('active');
+                stepElement.classList.add('completed');
+                lineElement.classList.remove('active');
+                lineElement.classList.add('completed');
+            }
+            else if (i === step) {
+                // Current step
+                stepElement.classList.add('active');
+                stepElement.classList.remove('completed');
+                lineElement.classList.add('active');
+                lineElement.classList.remove('completed');
+            }
+            else {
+                // Future steps
+                stepElement.classList.remove('active', 'completed');
+                lineElement.classList.remove('active', 'completed');
+            }
+        }
+    }
+}
+function resetToStep(step) {
+    // Hide all cards first
+    hideCard('session-selection');
+    hideCard('visualization-selection');
+    hideCard('results-card');
+    // Show cards based on step
+    switch (step) {
+        case 1:
+            // Only round selection visible
+            break;
+        case 2:
+            showCard('session-selection');
+            break;
+        case 3:
+            showCard('session-selection');
+            showCard('visualization-selection');
+            break;
+        case 4:
+            showCard('session-selection');
+            showCard('visualization-selection');
+            showCard('results-card');
+            break;
+    }
+    updateProgress(step);
 }
 window.logCurrentState = logCurrentState;
