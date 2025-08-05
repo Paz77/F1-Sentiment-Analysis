@@ -593,10 +593,12 @@ class F1Database:
         except Exception as e:
             logging.error(f"Error listing visualizations: {e}")
             return []
-''' i just have this here for testing 
+
+"""
 def main():
-    
+    db = F1Database()
+    db.export_everything()
 
 if __name__ == "__main__":
     main()
-'''
+"""
