@@ -18,16 +18,180 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+class F1SentimentLexicon:
+    def __init__(self):
+        self.f1_positive_words = {
+            'overtake': 0.8, 'overtaking': 0.8, 'overtook': 0.8, 'overtaken': 0.8,
+            'pole': 0.9, 'pole position': 0.9, 'qualifying': 0.7, 'qualified': 0.7,
+            'win': 1.0, 'winner': 1.0, 'winning': 1.0, 'won': 1.0,
+            'podium': 0.8, 'podium finish': 0.9, 'top three': 0.8,
+            'fastest': 0.9, 'fastest lap': 0.9, 'purple sector': 0.8,
+            'championship': 0.6, 'champion': 0.9, 'championship lead': 0.8,
+            'points': 0.7, 'scored points': 0.8, 'point finish': 0.7,
+            
+            'battle': 0.6, 'racing': 0.7, 'wheel to wheel': 0.8,
+            'dramatic': 0.6, 'thrilling': 0.8, 'exciting': 0.8,
+            'incredible': 0.7, 'amazing': 0.8, 'fantastic': 0.8,
+            'brilliant': 0.8, 'outstanding': 0.8, 'perfect': 0.9,
+            
+            'strategy': 0.5, 'good strategy': 0.8, 'perfect strategy': 0.9,
+            'undercut': 0.7, 'overcut': 0.7, 'pit stop': 0.5,
+            'fast pit stop': 0.8, 'perfect pit stop': 0.9,
+            
+            'pace': 0.6, 'good pace': 0.8, 'strong pace': 0.8,
+            'grip': 0.6, 'good grip': 0.7, 'downforce': 0.5,
+            'aerodynamics': 0.5, 'power unit': 0.5, 'engine': 0.5,
+            
+            'talent': 0.8, 'skilled': 0.8, 'talented': 0.8,
+            'legend': 0.9, 'legendary': 0.9, 'masterclass': 0.9,
+            'consistency': 0.7, 'reliable': 0.7, 'mature': 0.7,
+        }
+
+        self.f1_negative_words = {
+            'crash': -0.6, 'crashed': -0.7, 'accident': -0.7, 'incident': -0.5,
+            'collision': -0.7, 'contact': -0.5, 'hit': -0.6, 'hit the wall': -0.8,
+            'spin': -0.6, 'spun': -0.7, 'spinning': -0.6,
+            'dnf': -0.8, 'did not finish': -0.8, 'retired': -0.7,
+            'dsq': -0.9, 'disqualified': -0.9, 'disqualification': -0.9,
+            'dnq': -0.8, 'did not qualify': -0.8,
+            
+            'slow': -0.6, 'slower': -0.6, 'slowest': -0.7,
+            'struggling': -0.6, 'struggle': -0.6, 'struggled': -0.6,
+            'problem': -0.5, 'issues': -0.5, 'technical issues': -0.7,
+            'failure': -0.7, 'mechanical failure': -0.8, 'engine failure': -0.8,
+            'breakdown': -0.7, 'broken': -0.6, 'damage': -0.6,
+            
+            'penalty': -0.6, 'penalties': -0.6, 'penalized': -0.7,
+            'mistake': -0.6, 'error': -0.6, 'blunder': -0.7,
+            'lockup': -0.5, 'locked up': -0.6, 'flat spot': -0.5,
+            'off track': -0.5, 'run wide': -0.5, 'cut the corner': -0.6,
+            
+            'safety car': -0.4, 'sc': -0.4, 'virtual safety car': -0.4, 'vsc': -0.4,
+            'red flag': -0.5, 'yellow flag': -0.3, 'double yellow': -0.4,
+            'blue flag': -0.3, 'lapped': -0.5, 'lapped car': -0.5,
+            
+            'tire wear': -0.4, 'tire degradation': -0.5, 'grain': -0.4,
+            'blistering': -0.5, 'flat tire': -0.7, 'puncture': -0.7,
+            'slow pit stop': -0.6, 'bad strategy': -0.6, 'wrong strategy': -0.7,
+            
+            'mistake': -0.6, 'error': -0.6, 'blunder': -0.7,
+            'inconsistent': -0.6, 'unreliable': -0.7, 'immature': -0.6,
+            'overaggressive': -0.5, 'reckless': -0.7, 'dangerous': -0.7,
+        }
+
+        self.f1_neutral_words = {
+            'drs': 0.0, 'drs zone': 0.0, 'drag reduction system': 0.0,
+            'kers': 0.0, 'kinetic energy recovery system': 0.0,
+            'ers': 0.0, 'energy recovery system': 0.0,
+            'mguk': 0.0, 'mguh': 0.0, 'turbo': 0.0,
+            'hybrid': 0.0, 'battery': 0.0, 'fuel': 0.0,
+            
+            'chicane': 0.0, 'hairpin': 0.0, 'straight': 0.0,
+            'corner': 0.0, 'turn': 0.0, 'sector': 0.0,
+            'pit lane': 0.0, 'pit wall': 0.0, 'garage': 0.0,
+            
+            'lap': 0.0, 'laps': 0.0, 'lap time': 0.0,
+            'position': 0.0, 'grid': 0.0, 'starting grid': 0.0,
+            'gap': 0.0, 'interval': 0.0, 'delta': 0.0,
+        }
+
+        self.f1_context_words = {
+            'crash': {
+                'positive_contexts': ['exciting', 'dramatic', 'spectacular'],
+                'negative_contexts': ['avoid', 'prevent', 'dangerous'],
+                'default_score': -0.6
+            },
+            'battle': {
+                'positive_contexts': ['racing', 'wheel to wheel', 'close'],
+                'negative_contexts': ['avoid', 'prevent', 'dangerous'],
+                'default_score': 0.6
+            },
+            'aggressive': {
+                'positive_contexts': ['racing', 'overtaking', 'fighting'],
+                'negative_contexts': ['too', 'over', 'reckless'],
+                'default_score': 0.3
+            }
+        }
+
+    def get_f1_sentiment_score(self, text, base_sentiment_score=0.0):
+        if not text:
+            return base_sentiment_score
+
+        text_lower = text.lower()
+        words = text_lower.split()
+
+        f1_adjustment = 0.0
+        word_count = 0
+
+        for word in words:
+            if word in self.f1_positive_words:
+                f1_adjustment += self.f1_positive_words[word]
+                word_count += 1
+
+            elif word in self.f1_negative_words:
+                f1_adjustment += self.f1_negative_words[word]
+                word_count += 1
+
+            elif word in self.f1_context_words:
+                context_score = self._analyze_context_word(word, text_lower)
+                f1_adjustment += context_score
+                word_count += 1
+        
+        if word_count > 0:
+            avg_f1_adjustment = f1_adjustment / word_count
+            final_score = (base_sentiment_score * 0.7) + (avg_f1_adjustment * 0.3)
+        else:
+            final_score = base_sentiment_score
+            
+        return final_score
+
+    def _analyze_context_word(self, word, text):
+        context_info = self.f1_context_words[word]
+        default_score = context_info['default_score']
+        
+        positive_context_found = any(
+            context in text for context in context_info['positive_contexts']
+        )
+        
+        negative_context_found = any(
+            context in text for context in context_info['negative_contexts']
+        )
+        
+        if positive_context_found and not negative_context_found:
+            return min(default_score + 0.2, 1.0)  
+        elif negative_context_found and not positive_context_found:
+            return max(default_score - 0.2, -1.0)  
+        else:
+            return default_score
+
+    def get_f1_keywords(self, text):
+        if not text:
+            return []
+            
+        text_lower = text.lower()
+        words = text_lower.split()
+        
+        f1_keywords = []
+        for word in words:
+            if (word in self.f1_positive_words or 
+                word in self.f1_negative_words or 
+                word in self.f1_neutral_words or
+                word in self.f1_context_words):
+                f1_keywords.append(word)
+                
+        return f1_keywords
+
 class MultiModelSentimentAnalyzer:
     def __init__(self):
         self.vader_analyzer = SentimentIntensityAnalyzer()
         self.textblob_analyzer = TextBlob
+        self.f1_lexicon = F1SentimentLexicon()
 
         try:
             self.bert_analyzer = pipeline(
                 "sentiment-analysis", 
                 model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-                return_all_scores=True
+                top_k=None  
             )
         except Exception as e:
             logging.warning(f"BERT model not available: {e}")
@@ -36,26 +200,39 @@ class MultiModelSentimentAnalyzer:
     def analyze_vader(self, text):
         try:
             scores = self.vader_analyzer.polarity_scores(text)
+
+            f1_adjusted_compound = self.f1_lexicon.get_f1_sentiment_score(
+                text, scores['compound']
+            )
+
             return {
-                'compound': scores['compound'],
+                'compound': f1_adjusted_compound,
                 'positive': scores['pos'],
                 'negative': scores['neg'],
-                'neutral': scores['neu']
+                'neutral': scores['neu'],
+                'f1_keywords' : self.f1_lexicon.get_f1_keywords(text)
             }
+
         except Exception as e:
             logging.error(f"VADER analysis error: {e}")
-            return {'compound': 0, 'positive': 0, 'negative': 0, 'neutral': 1}
+            return {'compound': 0, 'positive': 0, 'negative': 0, 'neutral': 1, 'f1_keywords': []}
 
     def analyze_textblob(self, text):
         try:
             blob = self.textblob_analyzer(text)
+
+            f1_adjusted_polarity = self.f1_lexicon.get_f1_sentiment_score(
+                text, blob.sentiment.polarity
+            )
+
             return {
-                'polarity': blob.sentiment.polarity,
-                'subjectivity': blob.sentiment.subjectivity
+                'polarity': f1_adjusted_polarity,
+                'subjectivity': blob.sentiment.subjectivity,
+                'f1_keywords' : self.f1_lexicon.get_f1_keywords(text)
             }
         except Exception as e:
             logging.error(f"TextBlob analysis error: {e}")
-            return {'polarity': 0, 'subjectivity': 0.5}
+            return {'polarity': 0, 'subjectivity': 0.5, 'f1_keywords': []}
 
     def analyze_bert(self, text):
         if not self.bert_analyzer:
@@ -111,7 +288,8 @@ class MultiModelSentimentAnalyzer:
             'textblob_subjectivity': textblob_result['subjectivity'],
             'bert_score': bert_result['bert_score'],
             'bert_label': bert_result['bert_label'],
-            'model_agreement': self.calculate_agreement(vader_result, textblob_result, bert_result)
+            'model_agreement': self.calculate_agreement(vader_result, textblob_result, bert_result),
+            'f1_keywords': vader_result.get('f1_keywords', [])
         }
 
     def calculate_agreement(self, vader_result, textblob_result, bert_result):
