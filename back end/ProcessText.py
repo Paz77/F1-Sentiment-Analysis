@@ -74,7 +74,6 @@ class F1SentimentLexicon:
             'blistering': -0.5, 'flat tire': -0.7, 'puncture': -0.7,
             'slow pit stop': -0.6, 'bad strategy': -0.6, 'wrong strategy': -0.7,
             
-            'mistake': -0.6, 'error': -0.6, 'blunder': -0.7,
             'inconsistent': -0.6, 'unreliable': -0.7, 'immature': -0.6,
             'overaggressive': -0.5, 'reckless': -0.7, 'dangerous': -0.7,
         }
@@ -381,6 +380,31 @@ def tokenize_remove_stops(text):
     
     return [t for t in tokens if t not in stops and len(t)>1]
 
+def validate_sentiment_scores(df):
+    df['sentiment_confidence'] = 0.0
+
+    df.loc[df['cleaned'].str.len() < 10, 'sentiment_confidence'] -= 0.3
+
+    number_count = df['cleaned'].str.count(r'\d+')
+    df.loc[number_count > 3, 'sentiment_confidence'] -= 0.2
+
+    url_count = df['text'].str.count(r'http')
+    df.loc[url_count > 0, 'sentiment_confidence'] -= 0.1
+
+    driver_team_pattern = r'\b(hamilton|verstappen|leclerc|sainz|norris|russell|alonso|stroll|ocon|gasly|tsunoda|bottas|zhou|magnussen|hulkenberg|albon|sargeant|piastri|ricciardo|mercedes|ferrari|red bull|mclaren|aston martin|alpine|haas|williams|racing bulls|rb)\b'
+    driver_team_count = df['cleaned'].str.count(driver_team_pattern, flags=re.IGNORECASE)
+    df.loc[driver_team_count > 2, 'sentiment_confidence'] -= 0.15
+
+    punctuation_count = df['text'].str.count(r'[!?]{2,}')
+    df.loc[punctuation_count > 0, 'sentiment_confidence'] -= 0.1
+
+    emoji_count = df['text'].str.count(r':[a-z_]+:')
+    text_length = df['text'].str.len()
+    emoji_ratio = emoji_count / text_length.replace(0, 1)
+    df.loc[emoji_ratio > 0.3, 'sentiment_confidence'] -= 0.2
+    
+    return df
+
 def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""):
     """ proccesses sentiment directly from db"""
     db = F1Database()
@@ -427,6 +451,11 @@ def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""
     df['cleaned'] = df['text'].map(clean_text)
     df['tokens'] = df['cleaned'].map(tokenize_remove_stops)
 
+    df = validate_sentiment_scores(df)
+    low_confidence_count = len(df[df['sentiment_confidence'] < -0.3])
+    total_count = len(df)
+    logging.info(f"Validation complete: {low_confidence_count}/{total_count} posts flagged as low confidence")
+
     analyzer = MultiModelSentimentAnalyzer()
     logging.info("starting multi-model sentiment analysis..")
 
@@ -440,6 +469,7 @@ def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""
 
     sentiment_df = pd.DataFrame(sentiment_results)
     df = pd.concat([df, sentiment_df], axis=1)
+    df['adjusted_ensemble_score'] = df['ensemble_score'] * (1 + df['sentiment_confidence'])
     db.save_sentiment_scores(df)
     
     return df
