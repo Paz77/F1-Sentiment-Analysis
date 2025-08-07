@@ -18,7 +18,112 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+class MultiModelSentimentAnalyzer:
+    def __init__(self):
+        self.vader_analyzer = SentimentIntensityAnalyzer()
+        self.textblob_analyzer = TextBlob
 
+        try:
+            self.bert_analyzer = pipeline(
+                "sentiment-analysis", 
+                model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                return_all_scores=True
+            )
+        except Exception as e:
+            logging.warning(f"BERT model not available: {e}")
+            self.bert_analyzer = None
+
+    def analyze_vader(self, text):
+        try:
+            scores = self.vader_analyzer.polarity_scores(text)
+            return {
+                'compound': scores['compound'],
+                'positive': scores['pos'],
+                'negative': scores['neg'],
+                'neutral': scores['neu']
+            }
+        except Exception as e:
+            logging.error(f"VADER analysis error: {e}")
+            return {'compound': 0, 'positive': 0, 'negative': 0, 'neutral': 1}
+
+    def analyze_textblob(self, text):
+        try:
+            blob = self.textblob_analyzer(text)
+            return {
+                'polarity': blob.sentiment.polarity,
+                'subjectivity': blob.sentiment.subjectivity
+            }
+        except Exception as e:
+            logging.error(f"TextBlob analysis error: {e}")
+            return {'polarity': 0, 'subjectivity': 0.5}
+
+    def analyze_bert(self, text):
+        if not self.bert_analyzer:
+            return {'bert_score': 0, 'bert_label': 'neutral'}
+        
+        try:
+            if len(text) > 500:
+                text = text[:500]
+            
+            result = self.bert_analyzer(text)[0]
+            
+            label_scores = {item['label']: item['score'] for item in result}
+            
+            if 'negative' in label_scores and 'positive' in label_scores:
+                bert_score = label_scores['positive'] - label_scores['negative']
+            else:
+                bert_score = 0
+            
+            return {
+                'bert_score': bert_score,
+                'bert_label': max(result, key=lambda x: x['score'])['label']
+            }
+        except Exception as e:
+            logging.error(f"BERT analysis error: {e}")
+            return {'bert_score': 0, 'bert_label': 'neutral'}
+
+    def ensemble_analysis(self, text, weights=None):
+        if weights is None:
+            weights = {'vader': 0.4, 'textblob': 0.3, 'bert': 0.3}
+
+        vader_result = self.analyze_vader(text)
+        textblob_result = self.analyze_textblob(text)
+        bert_result = self.analyze_bert(text)
+
+        ensemble_score = (
+            vader_result['compound'] * weights['vader'] +
+            textblob_result['polarity'] * weights['textblob'] +
+            bert_result['bert_score'] * weights['bert']
+        )
+
+        if ensemble_score > 0.1:
+            sentiment_category = 'positive'
+        elif ensemble_score < -0.1:
+            sentiment_category = 'negative'
+        else:
+            sentiment_category = 'neutral'
+
+        return {
+            'ensemble_score': ensemble_score,
+            'sentiment_category': sentiment_category,
+            'vader_score': vader_result['compound'],
+            'textblob_polarity': textblob_result['polarity'],
+            'textblob_subjectivity': textblob_result['subjectivity'],
+            'bert_score': bert_result['bert_score'],
+            'bert_label': bert_result['bert_label'],
+            'model_agreement': self.calculate_agreement(vader_result, textblob_result, bert_result)
+        }
+
+    def calculate_agreement(self, vader_result, textblob_result, bert_result):
+        scores = [
+        vader_result['compound'],
+        textblob_result['polarity'],
+        bert_result['bert_score']
+        ]
+            
+        std_dev = np.std(scores)
+        agreement = max(0, 1 - std_dev)  
+        return agreement
 
 def get_ordinal_suffix(num):
     num = int(num)
@@ -144,10 +249,21 @@ def process_sentiment_from_db(race_round: int, race_year: int, session: str = ""
     df['cleaned'] = df['text'].map(clean_text)
     df['tokens'] = df['cleaned'].map(tokenize_remove_stops)
 
-    sia = SentimentIntensityAnalyzer()
-    df['vader_score'] = df['cleaned'].map(lambda txt: sia.polarity_scores(txt)['compound'])
+    analyzer = MultiModelSentimentAnalyzer()
+    logging.info("starting multi-model sentiment analysis..")
 
+    sentiment_results = []
+    for idx, row in df.iterrows():
+        if idx % 100 == 0:
+            logging.info(f"Processing item {idx + 1}/{len(df)}")
+        
+        result = analyzer.ensemble_analysis(row['cleaned'])
+        sentiment_results.append(result)
+
+    sentiment_df = pd.DataFrame(sentiment_results)
+    df = pd.concat([df, sentiment_df], axis=1)
     db.save_sentiment_scores(df)
+    
     return df
 
 def process_in_batches(df, batch_size=1000):
