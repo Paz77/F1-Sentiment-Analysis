@@ -411,18 +411,22 @@ class F1Database:
                 
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS sentiment_scores (
-                        id TEXT PRIMARY KEY,
-                        vader_score REAL,
-                        positive_score REAL,
-                        negative_score REAL,
-                        neutral_score REAL,
-                        cleaned_text TEXT,
-                        tokens TEXT,
-                        created_at TIMESTAMP, 
-                        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (id) REFERENCES posts(id) ON DELETE CASCADE,
-                        FOREIGN KEY (id) REFERENCES comments(id) ON DELETE CASCADE
-                    )
+                    id TEXT PRIMARY KEY,
+                    ensemble_score REAL,
+                    sentiment_category TEXT,
+                    vader_score REAL,
+                    textblob_polarity REAL,
+                    textblob_subjectivity REAL,
+                    bert_score REAL,
+                    bert_label TEXT,
+                    model_agreement REAL,
+                    cleaned_text TEXT,
+                    tokens TEXT,
+                    created_at TIMESTAMP, 
+                    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (id) REFERENCES posts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (id) REFERENCES comments(id) ON DELETE CASCADE
+                )
                 ''')
                 
                 conn.commit()
