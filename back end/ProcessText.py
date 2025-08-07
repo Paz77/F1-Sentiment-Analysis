@@ -1,15 +1,16 @@
 import re
 import nltk
 import argparse
-import requests
+import emoji
 import logging
 import pandas as pd
+import numpy as np
 from database import F1Database
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from nltk.stem import PorterStemmer
-from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.sentiment import SentimentIntensityAnalyzer
+from textblob import TextBlob
+from transformers import pipeline
 from datetime import datetime
 
 logging.basicConfig(
@@ -17,15 +18,68 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+
+
+def get_ordinal_suffix(num):
+    num = int(num)
+    if 10 <= num % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num % 10, 'th')
+    return f"{num}{suffix} place"
+
 def clean_text(text):
-    """Clean text with error handling"""
     try:
         if pd.isna(text) or text == "":
             return ""
-        
+
         text = str(text).lower()
         text = re.sub(r"http\S+", "", text)
-        text = re.sub(r"\[.*?\]\(.*?\)", "", text)
+        text = re.sub(r"\[.*?\]\(.*?\)", "", text) 
+        text = re.sub(r"\[.*?\]", "", text) 
+        text = emoji.demojize(text, delimiters=(' ', ' '))
+
+        f1_terms = {
+            'drs': 'drs zone',
+            'f1': 'formula one',
+            'gp': 'grand prix',
+            'dnf': 'did not finish',
+            'dsq': 'disqualified',
+            'dnq': 'did not qualify',
+            'sc': 'safety car',
+            'vsc': 'virtual safety car',
+            'red flag': 'red flag',
+            'yellow flag': 'yellow flag',
+            'blue flag': 'blue flag',
+            'tyres': 'tires',
+            'tyre': 'tire',
+            'qualifying': 'qualifying',
+            'pole': 'pole position',
+            'grid': 'starting grid',
+            'lap': 'lap',
+            'laps': 'laps',
+            'overtake': 'overtake',
+            'overtaking': 'overtaking',
+            'championship': 'championship',
+            'points': 'points',
+            'penalty': 'penalty',
+            'penalties': 'penalties',
+            'box': 'pit box',
+            'strategy': 'strategy',
+            'compound': 'tire compound',
+            'intermediate': 'intermediate tires',
+            'wet': 'wet tires',
+            'fp1': 'free practice one',
+            'fp2': 'free practice two', 
+            'fp3': 'free practice three',
+        }
+
+        pattern = '|'.join(r'\b' + re.escape(term) + r'\b' for term in f1_terms.keys())
+        text = re.sub(pattern, lambda m: f1_terms[m.group().lower()], text, flags=re.IGNORECASE)
+        
+        text = re.sub(r'p\s*[-.]?\s*(\d+)', lambda m: get_ordinal_suffix(m.group(1)), text, flags=re.IGNORECASE)
+        
+        text = re.sub(r'(.)\1{2,}', r'\1', text)
         text = re.sub(r"[^a-z0-9\s]", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
         return text
