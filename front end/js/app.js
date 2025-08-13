@@ -2,9 +2,10 @@
 let currentRound = null;
 let selectedSession = null;
 let selectedVisualizationType = 'timeline';
+let isRealtimeMode = true; // Always use real-time mode
 const roundSelect = document.getElementById('round');
 const sessionGrid = document.getElementById('session-grid');
-const analyzeButton = document.querySelector('button[type="submit"]');
+const analyzeButton = document.getElementById('analyze-btn');
 const sentimentImage = document.getElementById('sentiment-image');
 const gettingStartedCard = document.getElementById('getting-started');
 const roundSelectionCard = document.getElementById('round-selection');
@@ -65,6 +66,12 @@ function getSelectedVisualizationType() {
 async function analyzeSentiment() {
     if (!selectedSession)
         return;
+    // If real-time mode is enabled, use real-time analysis
+    if (isRealtimeMode) {
+        await performRealtimeAnalysis();
+        return;
+    }
+    // Original analysis code for existing data
     console.log('=== DEBUG INFO ===');
     console.log('selectedSession:', selectedSession);
     console.log('currentRound:', currentRound);
@@ -92,6 +99,59 @@ async function analyzeSentiment() {
         showError('Error analyzing sentiment. Check console for details.');
     }
     finally {
+        analyzeButton.disabled = false;
+        updateAnalyzeButton();
+    }
+}
+async function performRealtimeAnalysis() {
+    if (!selectedSession || !currentRound)
+        return;
+    console.log('=== REAL-TIME ANALYSIS DEBUG ===');
+    console.log('selectedSession:', selectedSession);
+    console.log('currentRound:', currentRound);
+    console.log('selectedVisualizationType:', selectedVisualizationType);
+    console.log('================================');
+    analyzeButton.disabled = true;
+    analyzeButton.textContent = 'Processing real-time data...';
+    // Show loading state
+    showRealtimeLoadingState();
+    try {
+        const visType = getSelectedVisualizationType();
+        console.log('Starting real-time sentiment analysis...');
+        console.log(`Real-time analyzing ${selectedSession} for round ${currentRound} with ${visType} visualization`);
+        // Call the real-time analysis endpoint
+        const response = await fetch(`${API_BASE}/realtime-analysis/${currentRound}/${selectedSession}?type=${visType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        if (data.success) {
+            console.log('Real-time analysis completed:', data.message);
+            if (data.visualization) {
+                displayVisualization(data.visualization);
+                showToast('Real-time analysis completed successfully!', 'success');
+            }
+            else if (data.warning) {
+                showToast(data.warning, 'info');
+                // Try to fetch the visualization after a short delay
+                setTimeout(() => {
+                    console.log('Attempting to fetch visualization after processing...');
+                    analyzeSentiment(); // Fall back to regular analysis to get the viz
+                }, 2000);
+            }
+        }
+        else {
+            showError('Real-time analysis failed: ' + (data.error || 'Unknown error'));
+        }
+    }
+    catch (error) {
+        console.error('Error in real-time analysis:', error);
+        showError('Error performing real-time analysis. Check console for details.');
+    }
+    finally {
+        hideRealtimeLoadingState();
         analyzeButton.disabled = false;
         updateAnalyzeButton();
     }
@@ -131,8 +191,8 @@ function updateAnalyzeButton() {
     const hasSelections = selectedSession !== null;
     analyzeButton.disabled = !hasSelections;
     if (hasSelections) {
-        analyzeButton.textContent = `Analyze ${selectedSession}`;
-        analyzeButton.className = 'btn-primary w-full';
+        analyzeButton.textContent = `Real-time Analyze ${selectedSession}`;
+        analyzeButton.className = 'btn-realtime w-full';
     }
     else {
         analyzeButton.textContent = 'Select session to analyze';
@@ -173,33 +233,29 @@ function setupEventListeners() {
             updateAnalyzeButton();
         }
     });
-    analyzeButton.addEventListener('click', () => {
-        if (!selectedSession || !currentRound) {
-            showToast('Please select a session first!', 'error');
-            return;
-        }
-        analyzeSentiment();
-        resetToStep(4);
-    });
-    console.log('Setting up radio button event listeners...');
-    const radioButtons = document.querySelectorAll('input[name="viz-type"]');
-    console.log('Found radio buttons:', radioButtons.length);
-    radioButtons.forEach((radio, index) => {
-        const input = radio;
-        console.log(`Setting up listener for radio ${index}: value="${input.value}", checked=${input.checked}`);
-        radio.addEventListener('change', (e) => {
-            const target = e.target;
-            console.log('Radio button clicked!');
-            console.log('Previous value:', selectedVisualizationType);
-            console.log('New value:', target.value);
-            selectedVisualizationType = target.value;
-            console.log(`Visualization type changed to: ${selectedVisualizationType}`);
-            if (selectedSession && currentRound) {
-                console.log('Auto-refreshing visualization with new type...');
+    if (analyzeButton) {
+        analyzeButton.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any default behavior
+            e.stopPropagation(); // Stop event from bubbling up
+            console.log('Analyze button clicked!'); // Add debug log
+            if (!selectedSession || !currentRound) {
+                showToast('Please select a session first!', 'error');
+                return;
+            }
+            // Wrap in try-catch to catch any errors
+            try {
                 analyzeSentiment();
+                resetToStep(4);
+            }
+            catch (error) {
+                console.error('Error during analysis:', error);
+                showError('An error occurred during analysis');
             }
         });
-    });
+    }
+    else {
+        console.error('Analyze button not found!');
+    }
     console.log('Event listeners set up successfully');
 }
 function showError(message) {
@@ -308,5 +364,35 @@ function resetToStep(step) {
             break;
     }
     updateProgress(step);
+}
+function showRealtimeLoadingState() {
+    const resultsCard = document.getElementById('results-card');
+    if (resultsCard) {
+        // Create or show a more detailed loading state
+        let loadingDiv = document.getElementById('realtime-loading');
+        if (!loadingDiv) {
+            loadingDiv = document.createElement('div');
+            loadingDiv.id = 'realtime-loading';
+            loadingDiv.className = 'text-center py-8';
+            loadingDiv.innerHTML = `
+                <div class="spinner-large"></div>
+                <p class="text-white mt-4 f1-subtitle">Scraping Reddit data...</p>
+                <p class="text-gray-300 text-sm mt-2">This may take 1-2 minutes</p>
+                <div class="progress-steps mt-4">
+                    <div class="step active">🔍 Scraping posts</div>
+                    <div class="step">🧠 Processing sentiment</div>
+                    <div class="step">📊 Creating visualization</div>
+                </div>
+            `;
+            resultsCard.appendChild(loadingDiv);
+        }
+        loadingDiv.classList.remove('hidden');
+    }
+}
+function hideRealtimeLoadingState() {
+    const loadingDiv = document.getElementById('realtime-loading');
+    if (loadingDiv) {
+        loadingDiv.classList.add('hidden');
+    }
 }
 window.logCurrentState = logCurrentState;

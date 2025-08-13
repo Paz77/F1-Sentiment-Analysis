@@ -8,6 +8,8 @@ interface ApiResponse<T>{
     races?: Race[],
     sessions?: string[];
     visualizations?: Visualization[];
+    message?: string;
+    warning?: string; 
 }
 
 interface Visualization{
@@ -15,13 +17,22 @@ interface Visualization{
     data: string;
 }
 
+interface RealtimeAnalysisResponse {
+    success: boolean;
+    message?: string;
+    warning?: string;
+    error?: string;
+    visualization?: Visualization;
+}
+
 let currentRound: string | null = null;
 let selectedSession: string | null = null;
 let selectedVisualizationType: string = 'timeline';
+let isRealtimeMode: boolean = true; // Always use real-time mode
 
 const roundSelect = document.getElementById('round') as HTMLSelectElement;
 const sessionGrid = document.getElementById('session-grid') as HTMLDivElement;
-const analyzeButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+const analyzeButton = document.getElementById('analyze-btn') as HTMLButtonElement;
 const sentimentImage = document.getElementById('sentiment-image') as HTMLImageElement;
 
 const gettingStartedCard = document.getElementById('getting-started') as HTMLDivElement;
@@ -92,6 +103,11 @@ function getSelectedVisualizationType(): string {
 async function analyzeSentiment(): Promise<void> {
     if(!selectedSession) return;
 
+    if (isRealtimeMode) {
+        await performRealtimeAnalysis();
+        return;
+    }
+
     console.log('=== DEBUG INFO ===');
     console.log('selectedSession:', selectedSession);
     console.log('currentRound:', currentRound);
@@ -123,6 +139,64 @@ async function analyzeSentiment(): Promise<void> {
         showError('Error analyzing sentiment. Check console for details.');
     }
     finally{
+        analyzeButton.disabled = false;
+        updateAnalyzeButton();
+    }
+}
+
+async function performRealtimeAnalysis(): Promise<void> {
+    if(!selectedSession || !currentRound) return;
+
+    console.log('=== REAL-TIME ANALYSIS DEBUG ===');
+    console.log('selectedSession:', selectedSession);
+    console.log('currentRound:', currentRound);
+    console.log('selectedVisualizationType:', selectedVisualizationType);
+    console.log('================================');
+
+    analyzeButton.disabled = true;
+    analyzeButton.textContent = 'Processing real-time data...';
+    
+    showRealtimeLoadingState();
+
+    try{
+        const visType = getSelectedVisualizationType();
+        
+        console.log('Starting real-time sentiment analysis...');
+        console.log(`Real-time analyzing ${selectedSession} for round ${currentRound} with ${visType} visualization`);
+
+        // Call the real-time analysis endpoint
+        const response = await fetch(`${API_BASE}/realtime-analysis/${currentRound}/${selectedSession}?type=${visType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data: RealtimeAnalysisResponse = await response.json();
+
+        if (data.success) {
+            console.log('Real-time analysis completed:', data.message);
+            
+            if (data.visualization) {
+                displayVisualization(data.visualization);
+                showToast('Real-time analysis completed successfully!', 'success');
+            } else if (data.warning) {
+                showToast(data.warning, 'info');
+                setTimeout(() => {
+                    console.log('Attempting to fetch visualization after processing...');
+                    analyzeSentiment();
+                }, 2000);
+            }
+        } else {
+            showError('Real-time analysis failed: ' + (data.error || 'Unknown error'));
+        }
+    }
+    catch(error){
+        console.error('Error in real-time analysis:', error);
+        showError('Error performing real-time analysis. Check console for details.');
+    }
+    finally{
+        hideRealtimeLoadingState();
         analyzeButton.disabled = false;
         updateAnalyzeButton();
     }
@@ -171,12 +245,12 @@ function populateSessionGrid(sessions: string[]): void {
 
 function updateAnalyzeButton(): void {
     const hasSelections = selectedSession !== null;
-
+    
     analyzeButton.disabled = !hasSelections;
-
+    
     if(hasSelections){
-        analyzeButton.textContent = `Analyze ${selectedSession}`;
-        analyzeButton.className = 'btn-primary w-full';
+        analyzeButton.textContent = `Real-time Analyze ${selectedSession}`;
+        analyzeButton.className = 'btn-realtime w-full';
     } else {
         analyzeButton.textContent = 'Select session to analyze';
         analyzeButton.className = 'bg-gray-400 text-white px-6 py-3 rounded-lg w-full font-medium cursor-not-allowed';
@@ -223,40 +297,30 @@ function setupEventListeners(): void {
             updateAnalyzeButton();
         }
     });
-
-    analyzeButton.addEventListener('click', () => {
-        if (!selectedSession || !currentRound) {
-            showToast('Please select a session first!', 'error');
-            return;
-        }
-        
-        analyzeSentiment();
-        resetToStep(4);
-    });
-
-    console.log('Setting up radio button event listeners...');
-    const radioButtons = document.querySelectorAll('input[name="viz-type"]');
-    console.log('Found radio buttons:', radioButtons.length);
-
-    radioButtons.forEach((radio, index) => {
-        const input = radio as HTMLInputElement;
-        console.log(`Setting up listener for radio ${index}: value="${input.value}", checked=${input.checked}`);
-        
-        radio.addEventListener('change', (e: Event) => {
-            const target = e.target as HTMLInputElement;
-            console.log('Radio button clicked!');
-            console.log('Previous value:', selectedVisualizationType);
-            console.log('New value:', target.value);
+    
+    if (analyzeButton) {
+        analyzeButton.addEventListener('click', (e: Event) => {
+            e.preventDefault(); 
+            e.stopPropagation(); 
             
-            selectedVisualizationType = target.value;
-            console.log(`Visualization type changed to: ${selectedVisualizationType}`);
+            console.log('Analyze button clicked!');
             
-            if(selectedSession && currentRound) {
-                console.log('Auto-refreshing visualization with new type...');
+            if (!selectedSession || !currentRound) {
+                showToast('Please select a session first!', 'error');
+                return;
+            }
+            
+            try {
                 analyzeSentiment();
+                resetToStep(4);
+            } catch (error) {
+                console.error('Error during analysis:', error);
+                showError('An error occurred during analysis');
             }
         });
-    });
+    } else {
+        console.error('Analyze button not found!');
+    }
     
     console.log('Event listeners set up successfully');
 }
@@ -380,6 +444,37 @@ function resetToStep(step: number): void {
     }
     
     updateProgress(step);
+}
+
+function showRealtimeLoadingState(): void {
+    const resultsCard = document.getElementById('results-card');
+    if (resultsCard) {
+        let loadingDiv = document.getElementById('realtime-loading');
+        if (!loadingDiv) {
+            loadingDiv = document.createElement('div');
+            loadingDiv.id = 'realtime-loading';
+            loadingDiv.className = 'text-center py-8';
+            loadingDiv.innerHTML = `
+                <div class="spinner-large"></div>
+                <p class="text-white mt-4 f1-subtitle">Scraping Reddit data...</p>
+                <p class="text-gray-300 text-sm mt-2">This may take 1-2 minutes</p>
+                <div class="progress-steps mt-4">
+                    <div class="step active">🔍 Scraping posts</div>
+                    <div class="step">🧠 Processing sentiment</div>
+                    <div class="step">📊 Creating visualization</div>
+                </div>
+            `;
+            resultsCard.appendChild(loadingDiv);
+        }
+        loadingDiv.classList.remove('hidden');
+    }
+}
+
+function hideRealtimeLoadingState(): void {
+    const loadingDiv = document.getElementById('realtime-loading');
+    if (loadingDiv) {
+        loadingDiv.classList.add('hidden');
+    }
 }
 
 (window as any).logCurrentState = logCurrentState;
