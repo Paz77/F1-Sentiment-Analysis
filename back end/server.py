@@ -1,6 +1,6 @@
-from numpy import histogram
 import requests
 import base64
+from FetchProcessVisualize import F1BatchScraper
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from database import F1Database
@@ -64,7 +64,7 @@ def get_sessions(round_num: int):
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/visualizations/<int:round_num>/<string:session>', methods=['GET'])
-def get_visualizations(round_num: int, session: str):
+def get_visualizations(round_num: int, session: str): #lowkey sucks, just pulls premade images from db
     viz_type = request.args.get('type', 'timeline')
 
     try:
@@ -93,6 +93,60 @@ def get_visualizations(round_num: int, session: str):
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/realtime-analysis/<int:round_num>/<string:session>', methods=['POST'])
+def realtime_analysis(round_num: int, session: str):
+    viz_type = request.args.get('type', 'timeline')
+ 
+    try:
+        if round_num < 1 or round_num > 24:
+            return jsonify({"success": False, "error": "Round number must be between 1 and 24"}), 400
+
+        valid_types = ["timeline", "histogram"]
+        if viz_type not in valid_types:
+            return jsonify({"success": False, "error": f"Invalid visualization type. Must be one of: {valid_types}"}), 400
+
+        scraper = F1BatchScraper()
+        print(f"Starting real-time analysis for 2025 Round {round_num} {session}")
+
+        success = scraper.execute_scraper(
+            2025, 
+            round_num, 
+            session,
+            process_sentiment=True,
+            create_visualizations=True,
+            save_visualizations=True
+        )
+
+        if success:
+            db = F1Database()
+            vis_bytes = db.get_visualization(session, round_num, 2025, viz_type)
+
+            if vis_bytes:
+                return jsonify({
+                    "success": True,
+                    "message": f"Real-time analysis completed for Round {round_num} {session}",
+                    "visualization": {
+                        "type": viz_type,
+                        "data": base64.b64encode(vis_bytes).decode('utf-8')
+                    }
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "message": f"Real-time analysis completed for Round {round_num} {session}, but visualization not found",
+                    "warning": "Data was processed but visualization may still be generating"
+                })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to complete real-time analysis for Round {round_num} {session}"
+            }), 500
+            
+    except Exception as e:
+        print(f"Error in realtime_analysis: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
