@@ -6,7 +6,7 @@ from flask_cors import CORS
 from database import F1Database
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins="*")
 
 @app.route('/api/races', methods=['GET']) 
 def get_races():

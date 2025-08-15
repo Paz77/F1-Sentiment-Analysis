@@ -29,10 +29,10 @@ let currentRound: string | null = null;
 let selectedSession: string | null = null;
 let selectedVisualizationType: string = 'timeline';
 let isRealtimeMode: boolean = true; // Always use real-time mode
+let analyzeButton = document.getElementById('analyze-btn') as HTMLButtonElement;
 
 const roundSelect = document.getElementById('round') as HTMLSelectElement;
 const sessionGrid = document.getElementById('session-grid') as HTMLDivElement;
-const analyzeButton = document.getElementById('analyze-btn') as HTMLButtonElement;
 const sentimentImage = document.getElementById('sentiment-image') as HTMLImageElement;
 
 const gettingStartedCard = document.getElementById('getting-started') as HTMLDivElement;
@@ -44,11 +44,57 @@ let currStep = 1;
 
 const API_BASE = 'http://127.0.0.1:5000/api';
 
-document.addEventListener('DOMContentLoaded', (): void => {
+document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
+    
+    // ADD THIS DEBUGGING CODE
+    // Check for any forms that might be causing issues
+    const allForms = document.querySelectorAll('form');
+    console.log('Forms found on page:', allForms.length);
+    if (allForms.length > 0) {
+        allForms.forEach((form, index) => {
+            console.log(`Form ${index}:`, form);
+            form.addEventListener('submit', (e) => {
+                console.error('FORM SUBMIT DETECTED! This is causing the refresh!');
+                e.preventDefault();
+            });
+        });
+    }
+    
+    // Monitor ALL button clicks
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'BUTTON' || target.closest('button')) {
+            const button = target.tagName === 'BUTTON' ? target : target.closest('button');
+            console.log('=== BUTTON CLICK DETECTED ===');
+            console.log('Button ID:', button?.id);
+            console.log('Button type:', (button as HTMLButtonElement)?.type);
+            console.log('Is default prevented?', e.defaultPrevented);
+            console.log('Event phase:', e.eventPhase);
+            console.log('=============================');
+        }
+    }, true); // Use capture phase
+    
+    // Check for page unload
+    window.addEventListener('beforeunload', (e) => {
+        console.error('PAGE IS ABOUT TO REFRESH/RELOAD!');
+        console.trace('Stack trace:');
+    });
+    
+    // Check the analyze button specifically
+    const btn = document.getElementById('analyze-btn') as HTMLButtonElement;
+    if (btn) {
+        console.log('Analyze button found:');
+        console.log('- Type attribute:', btn.type);
+        console.log('- Parent element:', btn.parentElement?.tagName);
+        console.log('- Is inside form?', btn.closest('form') !== null);
+    }
+    
     loadRaces();
     setupEventListeners();
     testRadioButtons();
+    
+    setTimeout(debugButtonBehavior, 1000);
 });
 
 async function loadRaces(): Promise<void>{
@@ -125,20 +171,28 @@ async function analyzeSentiment(): Promise<void> {
         console.log(`analyzing ${selectedSession} for round ${currentRound} with ${visType} visualization`);
 
         const response = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}?type=${visType}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data: ApiResponse<Visualization[]> = await response.json();
 
         if (data.success && data.visualizations && data.visualizations.length > 0) {
             console.log('Visualization received:', data.visualizations[0].type);
             displayVisualization(data.visualizations[0]);
         } else {
-            showError('No visualizations available for this session. Either nothing was found for this round & session or it hasn\'t happened yet.');
+            throw new Error('No visualizations available for this session. Either nothing was found for this round & session or it hasn\'t happened yet.');
         }
     }
     catch(error){
         console.error('Error analyzing sentiment:', error);
-        showError('Error analyzing sentiment. Check console for details.');
-    }
-    finally{
+        if (error instanceof Error) {
+            showError(`Analysis failed: ${error.message}`);
+        } else {
+            showError('An unexpected error occurred during analysis');
+        }
+    } finally {
         analyzeButton.disabled = false;
         updateAnalyzeButton();
     }
@@ -172,6 +226,10 @@ async function performRealtimeAnalysis(): Promise<void> {
             }
         });
 
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data: RealtimeAnalysisResponse = await response.json();
 
         if (data.success) {
@@ -182,18 +240,25 @@ async function performRealtimeAnalysis(): Promise<void> {
                 showToast('Real-time analysis completed successfully!', 'success');
             } else if (data.warning) {
                 showToast(data.warning, 'info');
-                setTimeout(() => {
-                    console.log('Attempting to fetch visualization after processing...');
-                    analyzeSentiment();
-                }, 2000);
+                const visType = getSelectedVisualizationType();
+                const found = await pollForVisualization(currentRound!, selectedSession!, visType, { intervalMs: 2000, maxAttempts: 15 });
+                if (!found) showToast('Still generating... try again shortly.', 'info');
             }
         } else {
-            showError('Real-time analysis failed: ' + (data.error || 'Unknown error'));
+            const errorMsg = data.error || 'Unknown error occurred';
+            console.error('API returned error:', errorMsg);
+            showError('Real-time analysis failed: ' + errorMsg);
         }
     }
     catch(error){
         console.error('Error in real-time analysis:', error);
-        showError('Error performing real-time analysis. Check console for details.');
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+            showError('Cannot connect to server. Make sure your Flask server is running!');
+        } else if (error instanceof Error) {
+            showError(`Real-time analysis failed: ${error.message}`);
+        } else {
+            showError('An unexpected error occurred during real-time analysis');
+        }
     }
     finally{
         hideRealtimeLoadingState();
@@ -298,31 +363,74 @@ function setupEventListeners(): void {
         }
     });
     
+    // FIXED: Simplified event listener setup without cloning
     if (analyzeButton) {
-        analyzeButton.addEventListener('click', (e: Event) => {
-            e.preventDefault(); 
-            e.stopPropagation(); 
-            
-            console.log('Analyze button clicked!');
-            
-            if (!selectedSession || !currentRound) {
-                showToast('Please select a session first!', 'error');
-                return;
-            }
-            
-            try {
-                analyzeSentiment();
-                resetToStep(4);
-            } catch (error) {
-                console.error('Error during analysis:', error);
-                showError('An error occurred during analysis');
-            }
-        });
+        analyzeButton.removeEventListener('click', handleAnalyzeClick);
+        analyzeButton.addEventListener('click', handleAnalyzeClick);
+        
+        console.log('Analyze button event listener attached successfully');
     } else {
         console.error('Analyze button not found!');
     }
     
     console.log('Event listeners set up successfully');
+}
+
+async function handleAnalyzeClick(e: MouseEvent): Promise<void> {
+    console.log('=== handleAnalyzeClick CALLED ===');
+    console.log('Event type:', e.type);
+    console.log('Event target:', e.target);
+    console.log('Event currentTarget:', e.currentTarget);
+    console.log('Before preventDefault - defaultPrevented:', e.defaultPrevented);
+    
+    // Prevent any default behavior and stop propagation
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation(); // Add this too
+    
+    console.log('After preventDefault - defaultPrevented:', e.defaultPrevented);
+    console.log('=================================');
+    
+    // Get the button from the event target to ensure we have the right reference
+    const button = e.currentTarget as HTMLButtonElement;
+    
+    if (button.disabled) {
+        console.log('Button already disabled, ignoring click');
+        return;
+    }
+    
+    button.disabled = true;
+    
+    // Validation check
+    if (!selectedSession || !currentRound) {
+        showToast('Please select a session first!', 'error');
+        button.disabled = false;
+        return;
+    }
+    
+    try {
+        console.log('About to call analyzeSentiment...');
+        await analyzeSentiment();
+        console.log('analyzeSentiment completed successfully');
+        resetToStep(4);
+    } catch (error) {
+        // IMPROVED ERROR HANDLING
+        console.error('Error during analysis (caught in handleAnalyzeClick):', error);
+        
+        // Don't let the error bubble up - handle it completely here
+        if (error instanceof Error) {
+            showError(`Analysis failed: ${error.message}`);
+        } else {
+            showError('An unexpected error occurred during analysis');
+        }
+        
+        // Prevent any further error propagation
+        return; // Exit cleanly without throwing
+    } finally {
+        console.log('handleAnalyzeClick finally block');
+        button.disabled = false;
+        updateAnalyzeButton();
+    }
 }
 
 function showError(message: string): void {
@@ -475,6 +583,47 @@ function hideRealtimeLoadingState(): void {
     if (loadingDiv) {
         loadingDiv.classList.add('hidden');
     }
+}
+
+function debugButtonBehavior() {
+    const button = document.getElementById('analyze-btn') as HTMLButtonElement;
+    if (button) {
+        console.log('Button element:', button);
+        console.log('Button type:', button.type);
+        console.log('Button onclick:', button.onclick);
+        console.log('Button form:', button.form);
+        console.log('Button parent form:', button.closest('form'));
+        
+        console.log('Button event listeners cannot be inspected in regular JavaScript');
+    }
+}
+
+async function  pollForVisualization(round: string, session: string, visType: string, {
+    intervalMs = 2000,
+    maxAttempts = 10
+} = {}): Promise<boolean> {
+    for(let attempt = 0; attempt < maxAttempts; attempt++){
+        try {
+            const resp = await fetch(`${API_BASE}/visualizations/${round}/${session}?type=${visType}`);
+            if (!resp.ok) {
+                console.warn(`Poll attempt ${attempt + 1} failed: HTTP ${resp.status}`);
+                await new Promise(r => setTimeout(r, intervalMs));
+                continue;
+            }
+            
+            const data: ApiResponse<Visualization[]> = await resp.json();
+
+            if (data.success && data.visualizations && data.visualizations.length > 0) {
+                displayVisualization(data.visualizations[0]);
+                return true;
+            }
+        } catch (error) {
+            console.warn(`Poll attempt ${attempt + 1} failed:`, error);
+        }
+        
+        await new Promise(r => setTimeout(r, intervalMs));
+    }
+    return false;
 }
 
 (window as any).logCurrentState = logCurrentState;

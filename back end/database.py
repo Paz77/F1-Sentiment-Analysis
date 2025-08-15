@@ -6,9 +6,18 @@ from typing import List, Dict, Optional
 import os
 
 class F1Database:
-    def __init__(self, db_path: str = "f1_sentiment.db"):
+    def __init__(self, db_path: Optional[str] = None):
         """Initialized F1 sentiment database"""
-        self.db_path = db_path
+        if db_path is None:
+            env_path = os.environ.get("F1_DB_PATH")
+            if env_path:
+                self.db_path = env_path
+            else:
+                default_dir = os.path.join(os.path.expanduser("~"), ".f1sentiment")
+                os.makedirs(default_dir, exist_ok=True)
+                self.db_path = os.path.join(default_dir, "f1_sentiment.db")
+        else:
+            self.db_path = db_path
         self.init_database()
 
     def init_database(self):
