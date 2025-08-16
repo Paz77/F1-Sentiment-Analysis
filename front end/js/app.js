@@ -2,8 +2,9 @@
 let currentRound = null;
 let selectedSession = null;
 let selectedVisualizationType = 'timeline';
-let isRealtimeMode = true; // Always use real-time mode
+let isRealtimeMode = true;
 let analyzeButton = document.getElementById('analyze-btn');
+let lastRealtimeVisualizations = null;
 const roundSelect = document.getElementById('round');
 const sessionGrid = document.getElementById('session-grid');
 const sentimentImage = document.getElementById('sentiment-image');
@@ -16,8 +17,6 @@ let currStep = 1;
 const API_BASE = 'http://127.0.0.1:5000/api';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
-    // ADD THIS DEBUGGING CODE
-    // Check for any forms that might be causing issues
     const allForms = document.querySelectorAll('form');
     console.log('Forms found on page:', allForms.length);
     if (allForms.length > 0) {
@@ -29,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    // Monitor ALL button clicks
     document.addEventListener('click', (e) => {
         const target = e.target;
         if (target.tagName === 'BUTTON' || target.closest('button')) {
@@ -41,13 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Event phase:', e.eventPhase);
             console.log('=============================');
         }
-    }, true); // Use capture phase
-    // Check for page unload
+    }, true);
     window.addEventListener('beforeunload', (e) => {
         console.error('PAGE IS ABOUT TO REFRESH/RELOAD!');
         console.trace('Stack trace:');
     });
-    // Check the analyze button specifically
     const btn = document.getElementById('analyze-btn');
     if (btn) {
         console.log('Analyze button found:');
@@ -161,11 +157,9 @@ async function performRealtimeAnalysis() {
     analyzeButton.textContent = 'Processing real-time data...';
     showRealtimeLoadingState();
     try {
-        const visType = getSelectedVisualizationType();
         console.log('Starting real-time sentiment analysis...');
-        console.log(`Real-time analyzing ${selectedSession} for round ${currentRound} with ${visType} visualization`);
-        // Call the real-time analysis endpoint
-        const response = await fetch(`${API_BASE}/realtime-analysis/${currentRound}/${selectedSession}?type=${visType}`, {
+        console.log(`Real-time analyzing ${selectedSession} for round ${currentRound}`);
+        const response = await fetch(`${API_BASE}/realtime-analysis/${currentRound}/${selectedSession}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -175,19 +169,35 @@ async function performRealtimeAnalysis() {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
-        if (data.success) {
-            console.log('Real-time analysis completed:', data.message);
-            if (data.visualization) {
-                displayVisualization(data.visualization);
+        console.log('Backend response:', data);
+        console.log('Response structure:', {
+            success: data.success,
+            hasVisualizations: !!data.visualizations,
+            vizCount: data.visualizations ? Object.keys(data.visualizations).length : 0,
+            message: data.message
+        });
+        if (data.success && data.visualizations) {
+            const vizTypes = Object.keys(data.visualizations);
+            lastRealtimeVisualizations = data.visualizations;
+            const selectedVizType = getSelectedVisualizationType();
+            if (data.visualizations[selectedVizType]) {
+                displayVisualization(data.visualizations[selectedVizType]);
+                console.log(`Displayed selected visualization: ${selectedVizType}`);
+            }
+            else {
+                const firstVizType = vizTypes[0];
+                displayVisualization(data.visualizations[firstVizType]);
+                console.log(`Selected type ${selectedVizType} not available, showing ${firstVizType}`);
+                showToast(`Note: ${selectedVizType} visualization not available, showing ${firstVizType} instead.`, 'info');
+            }
+            const stats = data.stats;
+            if (stats) {
+                showToast(`Analysis completed! Generated ${stats.visualizations_generated} visualizations from ${stats.post_limit} posts.`, 'success');
+            }
+            else {
                 showToast('Real-time analysis completed successfully!', 'success');
             }
-            else if (data.warning) {
-                showToast(data.warning, 'info');
-                const visType = getSelectedVisualizationType();
-                const found = await pollForVisualization(currentRound, selectedSession, visType, { intervalMs: 2000, maxAttempts: 15 });
-                if (!found)
-                    showToast('Still generating... try again shortly.', 'info');
-            }
+            console.log('Available visualizations:', vizTypes);
         }
         else {
             const errorMsg = data.error || 'Unknown error occurred';
@@ -290,7 +300,6 @@ function setupEventListeners() {
             updateAnalyzeButton();
         }
     });
-    // FIXED: Simplified event listener setup without cloning
     if (analyzeButton) {
         analyzeButton.removeEventListener('click', handleAnalyzeClick);
         analyzeButton.addEventListener('click', handleAnalyzeClick);
@@ -299,6 +308,12 @@ function setupEventListeners() {
     else {
         console.error('Analyze button not found!');
     }
+    const vizTypeRadios = document.querySelectorAll('input[name="viz-type"]');
+    vizTypeRadios.forEach(r => {
+        r.addEventListener('change', () => {
+            void handleVizTypeChange();
+        });
+    });
     console.log('Event listeners set up successfully');
 }
 async function handleAnalyzeClick(e) {
@@ -333,17 +348,14 @@ async function handleAnalyzeClick(e) {
         resetToStep(4);
     }
     catch (error) {
-        // IMPROVED ERROR HANDLING
         console.error('Error during analysis (caught in handleAnalyzeClick):', error);
-        // Don't let the error bubble up - handle it completely here
         if (error instanceof Error) {
             showError(`Analysis failed: ${error.message}`);
         }
         else {
             showError('An unexpected error occurred during analysis');
         }
-        // Prevent any further error propagation
-        return; // Exit cleanly without throwing
+        return;
     }
     finally {
         console.log('handleAnalyzeClick finally block');
@@ -519,5 +531,34 @@ async function pollForVisualization(round, session, visType, { intervalMs = 2000
         await new Promise(r => setTimeout(r, intervalMs));
     }
     return false;
+}
+async function handleVizTypeChange() {
+    const selected = getSelectedVisualizationType();
+    if (lastRealtimeVisualizations && lastRealtimeVisualizations[selected]) {
+        displayVisualization(lastRealtimeVisualizations[selected]);
+        console.log(`Switched to ${selected} from cache`);
+        return;
+    }
+    if (!currentRound || !selectedSession)
+        return;
+    try {
+        const resp = await fetch(`${API_BASE}/visualizations/${currentRound}/${selectedSession}?type=${selected}`);
+        if (!resp.ok) {
+            showToast(`Failed to fetch ${selected} visualization`, 'error');
+            return;
+        }
+        const data = await resp.json();
+        if (data.success && data.visualizations && data.visualizations.length > 0) {
+            displayVisualization(data.visualizations[0]);
+            console.log(`Switched to ${selected} via DB fetch`);
+        }
+        else {
+            showToast(`No ${selected} visualization available for this session`, 'info');
+        }
+    }
+    catch (error) {
+        console.error('Error fetching visualization:', error);
+        showToast(`Error fetching ${selected} visualization`, 'error');
+    }
 }
 window.logCurrentState = logCurrentState;
