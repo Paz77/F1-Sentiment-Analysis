@@ -96,15 +96,12 @@ def get_visualizations(round_num: int, session: str): #lowkey sucks, just pulls 
 
 @app.route('/api/realtime-analysis/<int:round_num>/<string:session>', methods=['POST'])
 def realtime_analysis(round_num: int, session: str):
-    viz_type = request.args.get('type', 'timeline')
+    post_limit = request.args.get('post_limit', 200, type=int)
+    comment_limit = request.args.get('comment_limit', 25, type=int)
  
     try:
         if round_num < 1 or round_num > 24:
             return jsonify({"success": False, "error": "Round number must be between 1 and 24"}), 400
-
-        valid_types = ["timeline", "histogram"]
-        if viz_type not in valid_types:
-            return jsonify({"success": False, "error": f"Invalid visualization type. Must be one of: {valid_types}"}), 400
 
         scraper = F1BatchScraper()
         print(f"Starting real-time analysis for 2025 Round {round_num} {session}")
@@ -113,6 +110,8 @@ def realtime_analysis(round_num: int, session: str):
             2025, 
             round_num, 
             session,
+            post_limit=post_limit,
+            comment_limit=comment_limit,
             process_sentiment=True,
             create_visualizations=True,
             save_visualizations=True
@@ -120,23 +119,51 @@ def realtime_analysis(round_num: int, session: str):
 
         if success:
             db = F1Database()
-            vis_bytes = db.get_visualization(session, round_num, 2025, viz_type)
-
-            if vis_bytes:
-                return jsonify({
+            
+            timeline_bytes = db.get_visualization(session, round_num, 2025, 'timeline')
+            histogram_bytes = db.get_visualization(session, round_num, 2025, 'histogram')
+            
+            visualizations = {}
+            warnings = []
+            
+            if timeline_bytes:
+                visualizations['timeline'] = {
+                    "type": "timeline",
+                    "data": base64.b64encode(timeline_bytes).decode('utf-8')
+                }
+            else:
+                warnings.append("Timeline visualization not found")
+            
+            if histogram_bytes:
+                visualizations['histogram'] = {
+                    "type": "histogram", 
+                    "data": base64.b64encode(histogram_bytes).decode('utf-8')
+                }
+            else:
+                warnings.append("Histogram visualization not found")
+            
+            if visualizations:
+                response_data = {
                     "success": True,
                     "message": f"Real-time analysis completed for Round {round_num} {session}",
-                    "visualization": {
-                        "type": viz_type,
-                        "data": base64.b64encode(vis_bytes).decode('utf-8')
+                    "visualizations": visualizations,
+                    "stats": {
+                        "post_limit": post_limit,
+                        "comment_limit": comment_limit,
+                        "visualizations_generated": len(visualizations)
                     }
-                })
+                }
+                
+                if warnings:
+                    response_data["warnings"] = warnings
+                
+                return jsonify(response_data)
             else:
                 return jsonify({
-                    "success": True,
-                    "message": f"Real-time analysis completed for Round {round_num} {session}, but visualization not found",
-                    "warning": "Data was processed but visualization may still be generating"
-                })
+                    "success": False,
+                    "error": f"No visualizations could be generated for Round {round_num} {session}",
+                    "message": "Analysis completed but visualizations failed to generate"
+                }), 500
         else:
             return jsonify({
                 "success": False,
