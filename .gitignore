@@ -22,3 +22,6 @@ venv.bak/
 
 # Node.js dependencies
 node_modules/
+
+#logging
+logs
