@@ -374,6 +374,11 @@ def tokenize_remove_stops(text):
         nltk.data.find('corpora/stopwords')
     except LookupError:
         nltk.download('stopwords')
+
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
     
     stops = set(stopwords.words('english'))
     tokens = word_tokenize(text)
