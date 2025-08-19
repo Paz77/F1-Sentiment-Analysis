@@ -48,7 +48,7 @@ const visualizationSelectionCard = document.getElementById('visualization-select
 const resultsCard = document.getElementById('results-card') as HTMLDivElement;
 let currStep = 1;
 
-const API_BASE = 'http://127.0.0.1:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
