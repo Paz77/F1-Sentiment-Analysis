@@ -48,7 +48,7 @@ const visualizationSelectionCard = document.getElementById('visualization-select
 const resultsCard = document.getElementById('results-card') as HTMLDivElement;
 let currStep = 1;
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5050/api';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, initializing F1 Sentiment Analysis app..');
@@ -118,7 +118,7 @@ async function loadRaces(): Promise<void>{
     }
     catch(error){
         console.error('Error loading races:', error);
-        showError('Error connecting to server. Make sure your Flask server is running on port 5000!');
+        showError('Error connecting to server. Make sure your Flask server is running on port 5050!');
     }
 }
 

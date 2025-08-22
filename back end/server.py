@@ -1,3 +1,4 @@
+import os
 import requests
 import base64
 from FetchProcessVisualize import F1BatchScraper
@@ -6,7 +7,14 @@ from flask_cors import CORS
 from database import F1Database
 
 app = Flask(__name__)
-CORS(app, origins="*")
+
+if os.environ.get('FLASK_ENV') == 'production':
+    app.config['DEBUG'] = False
+    app.config['TESTING'] = False
+    CORS(app, origins=["https://yourdomain.com"]) # change this for later
+else:
+    app.config['DEBUG'] = True
+    CORS(app, origins="*")
 
 @app.route('/api/races', methods=['GET']) 
 def get_races():
@@ -180,4 +188,4 @@ def health_check():
     return jsonify({"status": "healthy", "message": "api is running smoothly!"})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5050, debug=False)
